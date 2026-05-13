@@ -1,0 +1,132 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: "M PLUS Rounded 1c", system-ui, sans-serif;
+  color: #0b1b4d;
+  background: #06122e;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* レトロな空背景：星をCSSグラデで散らす */
+.bg-starsky {
+  background:
+    radial-gradient(2px 2px at 20% 30%, #ffffff 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 60% 20%, #ffffff 50%, transparent 51%),
+    radial-gradient(2px 2px at 80% 60%, #ffd24a 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 35% 75%, #ffffff 50%, transparent 51%),
+    radial-gradient(2px 2px at 90% 85%, #ff6fa3 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 12% 88%, #7cd6ff 50%, transparent 51%),
+    linear-gradient(180deg, #06122e 0%, #0b1b4d 60%, #1a2f7a 100%);
+}
+
+/* ドット風の枠 */
+.pixel-frame {
+  background: #fffaf0;
+  border: 3px solid #0b1b4d;
+  box-shadow:
+    0 0 0 3px #fffaf0,
+    0 0 0 6px #0b1b4d,
+    6px 8px 0 6px rgba(0, 0, 0, 0.85);
+  image-rendering: pixelated;
+}
+
+.pixel-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffd24a;
+  color: #0b1b4d;
+  font-weight: 900;
+  padding: 0.75rem 1.25rem;
+  border: 3px solid #0b1b4d;
+  box-shadow: 4px 4px 0 0 #0b1b4d;
+  transition: transform 80ms ease, box-shadow 80ms ease;
+  cursor: pointer;
+}
+.pixel-btn:hover {
+  transform: translate(1px, 1px);
+  box-shadow: 3px 3px 0 0 #0b1b4d;
+}
+.pixel-btn:active {
+  transform: translate(4px, 4px);
+  box-shadow: 0 0 0 0 #0b1b4d;
+}
+.pixel-btn[disabled] {
+  background: #cfcfcf;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.pixel-btn-secondary {
+  background: #ffffff;
+}
+
+.pixel-input {
+  width: 100%;
+  background: #ffffff;
+  border: 3px solid #0b1b4d;
+  padding: 0.6rem 0.75rem;
+  font-family: inherit;
+  font-size: 1rem;
+  outline: none;
+  box-shadow: 3px 3px 0 0 #0b1b4d;
+}
+.pixel-input:focus {
+  background: #fffce8;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: #0b1b4d;
+  color: #ffd24a;
+  font-family: "DotGothic16", monospace;
+  font-size: 0.8rem;
+  padding: 0.15rem 0.5rem;
+  border: 2px solid #0b1b4d;
+}
+
+.option-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: #ffffff;
+  border: 3px solid #0b1b4d;
+  padding: 0.65rem 0.9rem;
+  box-shadow: 3px 3px 0 0 #0b1b4d;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 80ms ease;
+}
+.option-card:hover {
+  transform: translate(1px, 1px);
+}
+.option-card.selected {
+  background: #ffd24a;
+}
+
+/* ピクセル風プログレス */
+.progress-track {
+  background: #0b1b4d;
+  border: 3px solid #0b1b4d;
+  padding: 3px;
+}
+.progress-fill {
+  background: repeating-linear-gradient(
+    90deg,
+    #5ee27a 0 8px,
+    #2db053 8px 12px
+  );
+  height: 14px;
+  transition: width 240ms ease;
+}
