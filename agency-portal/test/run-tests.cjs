@@ -1,0 +1,164 @@
+require('./gas-mock.cjs');
+const fs = require('fs');
+// GAS は全 .gs ファイルを1つのグローバルスコープに読み込む。それを再現するため連結して1回で評価する。
+const dir = require('path').join(__dirname, '..', 'src');
+const src = ['Config','Store','Setup','Code'].map(f => fs.readFileSync(dir + '/' + f + '.gs', 'utf8')).join('\n')
+  // トップレベルの const は eval では共有されないので、テストから見えるよう global に載せ替える
+  .replace(/^const (\w+) =/gm, 'globalThis.$1 =');
+(0, eval)(src);
+
+let pass = 0, fail = 0;
+function ok(cond, label, extra){
+  if (cond) { pass++; console.log('  ✓ ' + label); }
+  else { fail++; console.log('  ✗ ' + label + (extra !== undefined ? '  →  ' + JSON.stringify(extra) : '')); }
+}
+function head(t){ console.log('\n── ' + t); }
+
+head('1. 初期セットアップ');
+setupSpreadsheet();
+['代理店マスタ','紹介','お知らせ・LP','変更履歴','ダッシュボード','設定'].forEach(n =>
+  ok(!!SpreadsheetApp.getActive().getSheetByName(n), 'シート「' + n + '」が作られる'));
+const st0 = getSettings_();
+ok(!!st0['管理者トークン'], '管理者トークンが自動発行される', st0['管理者トークン']);
+ok(st0['ステータス選択肢'].indexOf('稼働中') >= 0, 'ステータス選択肢が入っている');
+setupSpreadsheet();  // 二度目
+ok(getSettings_()['管理者トークン'] === st0['管理者トークン'], '再実行しても管理者トークンは維持される');
+
+head('2. 数式列は上書きされない');
+const refSheet = sheet_('紹介');
+const fillCol = fieldIndex_(REFERRAL_FIELDS, 'fillState') + 1;
+const fillFormula = refSheet.getRange(2, fillCol).getValues()[0][0];
+ok(String(fillFormula).indexOf('=ARRAYFORMULA') === 0, '「情報の充足」列に数式が入る', fillFormula);
+ok(writableWidth_(REFERRAL_FIELDS) === REFERRAL_FIELDS.length - 1, 'スクリプトは数式列の手前までしか書かない');
+ok(writableWidth_(AGENCY_FIELDS) === AGENCY_FIELDS.length - 1, '代理店マスタも同様');
+
+head('3. 代理店の登録');
+setSetting_('ウェブアプリURL', 'https://script.google.com/macros/s/DUMMY/exec');
+const a1 = createAgency_({ name: '株式会社アルファ', contact: '田中', email: 't@alpha.jp' });
+const a2 = createAgency_({ name: 'ベータ商事', lpUrl: 'https://example.com/lp?ref=AG-002' });
+ok(a1.id === 'AG-001' && a2.id === 'AG-002', '代理店IDが連番になる', [a1.id, a2.id]);
+ok(a1.token !== a2.token && a1.token.length === 24, 'トークンが代理店ごとに発行される');
+ok(findAgencyByToken_(a1.token).name === '株式会社アルファ', 'トークンから代理店を引ける');
+ok(findAgencyByToken_('でたらめ') === null, '不正トークンは null');
+
+head('4. 紹介の登録（代理店から）');
+const r1 = createReferral_(a1, { kind:'顧客紹介', company:'カスタマー株式会社', name:'佐藤 一郎',
+  email:'sato@customer.jp', phone:'090-1111-2222', detail:'AI研修に興味あり', product:'AI活用研修' }, a1.name);
+const r2 = createReferral_(a1, { kind:'代理店紹介', name:'鈴木 二郎' }, a1.name);
+const r3 = createReferral_(a2, { kind:'顧客紹介', name:'高橋 三郎', company:'ガンマ' }, a2.name);
+ok(/^R-\d{8}-[0-9A-F]{6}$/.test(r1.id), '紹介IDが採番される', r1.id);
+ok(r1.status === '新規', '初期ステータスは新規');
+ok(r2.product === '', '代理店紹介では興味商材を持たない');
+ok(listReferrals_().length === 3, '紹介が3件たまる');
+ok(listReferralsByAgency_(a1.id).length === 2, '代理店ごとに絞り込める');
+let threw = false;
+try { createReferral_(a1, { name:'' }, a1.name); } catch(e){ threw = true; }
+ok(threw, '氏名が空なら登録できない');
+
+head('5. 情報の充足（伝えきっているかの判定）');
+const board1 = agencyBoard_(findAgencyById_(a1.id));
+const miss = k => {
+  const r = board1.referrals.filter(x => x.id === k)[0];
+  return REQUIRED_KEYS.filter(f => !String(r[f] || '').trim()).map(f => REQUIRED_LABELS[f]);
+};
+ok(miss(r1.id).length === 0, '全部埋まっている紹介は「不足なし」');
+ok(miss(r2.id).join('・') === '会社名・メール・電話・詳細', '足りない項目が列挙される', miss(r2.id));
+
+head('6. 代理店からの編集');
+apiAgencyUpdateReferral(a1.token, r2.id, { company:'デルタ工業', email:'suzuki@delta.jp', phone:'080-3333-4444', detail:'代理店に興味' });
+const r2b = findReferralById_(r2.id);
+ok(r2b.company === 'デルタ工業' && r2b.phone === '080-3333-4444', '代理店の修正がスプシに反映される');
+ok(r2b.updatedBy === a1.name, '最終更新者が記録される');
+ok(listReferrals_().length === 3, '更新で行が増えない（上書きされている）');
+let denied = false;
+try { apiAgencyUpdateReferral(a1.token, r3.id, { name:'乗っ取り' }); } catch(e){ denied = true; }
+ok(denied, '他社の紹介は編集できない');
+apiAgencyUpdateReferral(a1.token, r2.id, { memo:'代理店が書いたメモ' });
+ok(!findReferralById_(r2.id).memo, '代理店は弊社メモを書き換えられない');
+ok(agencyBoard_(a1).referrals[0].memo === undefined, '代理店へ弊社メモを送らない');
+
+head('7. 弊社（管理画面）からの更新');
+const adminToken = getSettings_()['管理者トークン'];
+apiAdminUpdateReferral(adminToken, r1.id, { status:'稼働中', memo:'初回商談済み', nextAction:'2026-09-01' });
+const r1b = findReferralById_(r1.id);
+ok(r1b.status === '稼働中' && r1b.memo === '初回商談済み', '弊社はステータスと社内メモを更新できる');
+apiAdminUpdateReferral(adminToken, r3.id, { status:'失注', lostReason:'音信不通' });
+ok(findReferralById_(r3.id).lostReason === '音信不通', '失注理由が入る');
+apiAdminUpdateReferral(adminToken, r3.id, { status:'アプローチ中' });
+ok(findReferralById_(r3.id).lostReason === '', '失注を解除すると理由がクリアされる');
+let badAdmin = false;
+try { apiAdminRefresh('にせトークン'); } catch(e){ badAdmin = true; }
+ok(badAdmin, '管理者トークンが違えば拒否される');
+
+head('8. ステータス編集の可否設定');
+setSetting_('代理店によるステータス編集', '不可');
+apiAgencyUpdateReferral(a1.token, r1.id, { status:'失注' });
+ok(findReferralById_(r1.id).status === '稼働中', '「不可」なら代理店はステータスを変えられない');
+setSetting_('代理店によるステータス編集', '許可');
+apiAgencyUpdateReferral(a1.token, r1.id, { status:'保留' });
+ok(findReferralById_(r1.id).status === '保留', '「許可」なら代理店も変えられる');
+
+head('9. 変更履歴（追記専用の台帳）');
+const logs = readAll_(SHEETS.LOG, LOG_FIELDS);
+ok(logs.length >= 8, '登録・更新のたびに履歴が積み上がる（' + logs.length + '件）');
+ok(logs.filter(l => l.action === '新規').length === 3, '新規登録が3件記録されている');
+ok(logs.filter(l => l.action === 'ステータス変更').length >= 3, 'ステータス変更も記録される');
+const snap = JSON.parse(logs[0].snapshot);
+ok(snap['氏名'] === '佐藤 一郎' && snap['メールアドレス'] === 'sato@customer.jp',
+   '履歴のスナップショットから元データを復元できる');
+ok(findReferralById_(r1.id)._row === 2, '1件目は2行目に入る（数式列があってもズレない）', findReferralById_(r1.id)._row);
+// 紹介シートの行を消しても履歴は残る
+const victim = findReferralById_(r1.id)._row;
+sheet_(SHEETS.REFERRAL).data[victim - 1] = [];
+ok(listReferrals_().length === 2, '行を消すと紹介シートからは消える', listReferrals_().length);
+ok(readAll_(SHEETS.LOG, LOG_FIELDS).length === logs.length, 'それでも変更履歴は失われない');
+const restored = JSON.parse(readAll_(SHEETS.LOG, LOG_FIELDS).filter(l => l.referralId === r1.id)[0].snapshot);
+ok(restored['氏名'] === '佐藤 一郎', '消えた行を履歴から復元できる');
+
+head('10. 代理店名の変更が紹介側にも波及');
+updateAgency_({ id: a1.id, name: 'アルファ株式会社' });
+ok(listReferralsByAgency_(a1.id).every(r => r.agencyName === 'アルファ株式会社'), '既存の紹介の代理店名も更新される');
+
+head('11. お知らせ・LP の出し分け');
+saveNotice_({ title:'最新のAI研修LPはこちら', kind:'最新LP', url:'https://example.com/v2', target:'全体', published:true, order:'1' });
+saveNotice_({ title:'アルファ様限定のご案内', kind:'お知らせ', target:a1.id, published:true, order:'2' });
+saveNotice_({ title:'下書き', kind:'お知らせ', target:'全体', published:false, order:'3' });
+ok(noticesForAgency_(a1.id).length === 2, 'アルファには全体＋限定の2件');
+ok(noticesForAgency_(a2.id).length === 1, 'ベータには全体の1件のみ');
+ok(noticesForAgency_(a1.id)[0].title === '最新のAI研修LPはこちら', '表示順で並ぶ');
+
+head('12. マイページURL / 管理画面URL');
+const base = getSettings_()['ウェブアプリURL'];
+const ab = adminBoard_(adminToken);
+ok(ab.agencies[0].mypageUrl === base + '?a=' + findAgencyById_(a1.id).token, 'マイページURLが組み立てられる');
+const oldToken = findAgencyById_(a1.id).token;
+rotateAgencyToken_(a1.id);
+ok(findAgencyByToken_(oldToken) === null, 'URL再発行で古いURLは無効になる');
+ok(findAgencyByToken_(findAgencyById_(a1.id).token).id === a1.id, '新しいURLは有効');
+
+head('13. 停止中の代理店');
+updateAgency_({ id: a2.id, name: 'ベータ商事', active: '停止' });
+let stopped = false;
+try { requireAgency_(findAgencyById_(a2.id).token); } catch(e){ stopped = true; }
+ok(stopped, '停止した代理店はページを開けない');
+
+head('14. 通知メール');
+setSetting_('通知先メールアドレス', 'sales@example.com');
+MailApp.sent = [];
+createReferral_(findAgencyById_(a1.id), { kind:'顧客紹介', name:'通知テスト' }, 'アルファ株式会社');
+ok(MailApp.sent.length === 1, '新規登録で通知メールが飛ぶ');
+ok(MailApp.sent[0].subject.indexOf('顧客紹介') > 0, '件名に種別が入る', MailApp.sent[0].subject);
+setSetting_('新規登録メール通知', 'OFF');
+MailApp.sent = [];
+createReferral_(findAgencyById_(a1.id), { kind:'顧客紹介', name:'通知OFFテスト' }, 'アルファ株式会社');
+ok(MailApp.sent.length === 0, 'OFFにすると飛ばない');
+
+head('15. 画面に渡すデータ');
+const ab2 = adminBoard_(adminToken);
+ok(ab2.options.statuses.length === 7 && ab2.options.kinds.length === 2, '選択肢が設定シートから供給される');
+ok(typeof ab2.referrals[0].memo === 'string', '管理画面には弊社メモが渡る');
+ok(jsonForHtml_({ x: '</script><script>alert(1)</script>' }).indexOf('</script>') < 0, 'HTML埋め込み用JSONで < がエスケープされる');
+
+console.log('\n────────────────────────');
+console.log(pass + ' passed, ' + fail + ' failed');
+process.exit(fail ? 1 : 0);

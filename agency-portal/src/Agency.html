@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <base target="_top">
+  <?!= include('Style'); ?>
+</head>
+<body>
+
+<div class="appbar">
+  <div class="wrap appbar-row">
+    <div>
+      <div class="eyebrow" id="hdCompany"></div>
+      <h1 id="hdName"></h1>
+      <div class="sub">ご紹介の登録・進捗確認ページ</div>
+    </div>
+    <button class="iconbtn" id="btnRefresh" type="button">更新</button>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <p class="note" id="intro" style="margin:14px 2px 0"></p>
+
+  <div class="section"><div class="stats" id="stats"></div></div>
+
+  <div class="section" id="alertBox" style="display:none"></div>
+
+  <div class="section" id="lpBox"></div>
+
+  <div class="section" id="noticeBox"></div>
+
+  <div class="section">
+    <div class="section-title">ご紹介一覧</div>
+    <div class="seg" id="segKind"></div>
+    <div class="chips" id="chipStatus" style="margin-top:8px"></div>
+    <div class="list" id="list" style="margin-top:8px"></div>
+  </div>
+
+  <p class="note" style="margin:22px 2px 8px">
+    入力いただいた内容は弊社のスプレッドシートにそのまま蓄積されます。修正した内容もすぐに反映されます。
+  </p>
+</div>
+
+<button class="fab" id="fab" type="button">＋ 紹介を登録</button>
+
+<div class="mask" id="mask"></div>
+<div class="sheet" id="sheet">
+  <div class="sheet-head">
+    <h2 id="sheetTitle">紹介を登録</h2>
+    <button class="x" id="sheetClose" type="button">×</button>
+  </div>
+  <div class="sheet-body" id="sheetBody"></div>
+  <div class="sheet-foot" id="sheetFoot"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="veil" id="veil"><div class="spin"></div></div>
+
+<script>
+var BOOT = <?!= boot ?>;
+
+var state = {
+  board: BOOT,
+  kind: 'all',
+  status: 'all',
+  editing: null,
+  draft: {}
+};
+
+/* ---------------- utilities ---------------- */
+function $(id){ return document.getElementById(id); }
+function h(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function veil(on){ $('veil').classList.toggle('on', !!on); }
+var toastTimer = null;
+function toast(msg, isErr){
+  var t = $('toast');
+  t.textContent = msg;
+  t.classList.toggle('err', !!isErr);
+  t.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function(){ t.classList.remove('on'); }, 2600);
+}
+function opts(){ return state.board.options; }
+
+/** 未入力の項目名の配列を返す */
+function missingOf(r){
+  var o = opts(), out = [];
+  for (var i = 0; i < o.requiredKeys.length; i++){
+    var k = o.requiredKeys[i];
+    if (!String(r[k] || '').trim()) out.push(o.requiredLabels[k] || k);
+  }
+  return out;
+}
+function statusStyle(s){
+  var c = (opts().statusColors || {})[s] || { bg:'#f0f1f3', fg:'#5a616b' };
+  return 'background:' + c.bg + ';color:' + c.fg;
+}
+
+/** サーバ呼び出し（成功したら board を差し替えて再描画） */
+function call(fn, args, onDone){
+  veil(true);
+  var r = google.script.run
+    .withSuccessHandler(function(res){
+      veil(false);
+      state.board = res;
+      render();
+      if (onDone) onDone(res);
+    })
+    .withFailureHandler(function(err){
+      veil(false);
+      toast((err && err.message) ? err.message : '通信に失敗しました', true);
+    });
+  r[fn].apply(r, args);
+}
+
+/* ---------------- render ---------------- */
+function render(){
+  var b = state.board;
+  $('hdCompany').textContent = b.company + ' 代理店ポータル';
+  $('hdName').textContent = b.agency.name + ' 様';
+  $('intro').textContent = b.intro || '';
+  $('intro').style.display = b.intro ? '' : 'none';
+  renderStats();
+  renderAlert();
+  renderLp();
+  renderNotices();
+  renderFilters();
+  renderList();
+}
+
+function renderStats(){
+  var rs = state.board.referrals;
+  var n = function(f){ var c=0; for (var i=0;i<rs.length;i++) if(f(rs[i])) c++; return c; };
+  var active = n(function(r){ return r.status === '稼働中'; });
+  var approaching = n(function(r){ return r.status === 'アプローチ中' || r.status === '商談中' || r.status === '新規'; });
+  var lost = n(function(r){ return r.status === '失注'; });
+  $('stats').innerHTML =
+    tile(rs.length, '合計', '') +
+    tile(approaching, '進行中', 'warn') +
+    tile(active, '稼働中', 'ok') +
+    tile(lost, '失注', 'danger');
+}
+function tile(v, l, cls){
+  return '<div class="stat ' + cls + '"><div class="n">' + v + '</div><div class="l">' + l + '</div></div>';
+}
+
+function renderAlert(){
+  var lack = state.board.referrals.filter(function(r){ return missingOf(r).length > 0; });
+  var box = $('alertBox');
+  if (!lack.length){ box.style.display = 'none'; return; }
+  box.style.display = '';
+  box.innerHTML =
+    '<div class="alert"><span>⚠️</span><div>弊社へ伝わっていない情報が <b>' + lack.length + '件</b> あります。<br>' +
+    'タップして追記いただけると、こちらから動けます。</div>' +
+    '<button type="button" id="btnLack">見る</button></div>';
+  $('btnLack').onclick = function(){ state.status = '__lack'; state.kind = 'all'; renderFilters(); renderList(); $('list').scrollIntoView({behavior:'smooth', block:'start'}); };
+}
+
+function renderLp(){
+  var a = state.board.agency;
+  var html = '<div class="section-title">御社専用 AI活用研修 説明LP</div><div class="card lp">';
+  if (a.lpUrl){
+    html += '<div class="note">このURLからの申込は御社からのご紹介として記録されます。</div>' +
+            '<code class="u" id="lpUrlText">' + h(a.lpUrl) + '</code>' +
+            (a.lpNote ? '<div class="note" style="margin:-4px 0 10px">' + h(a.lpNote) + '</div>' : '') +
+            '<div class="row-btn">' +
+            '<button class="btn subtle" type="button" id="btnCopyLp">URLをコピー</button>' +
+            '<a class="btn primary" href="' + h(a.lpUrl) + '" target="_blank" rel="noopener">LPを開く</a>' +
+            '</div>';
+  } else {
+    html += '<div class="note">現在、御社専用LPを準備中です。公開次第このページに表示されます。</div>';
+  }
+  html += '</div>';
+  $('lpBox').innerHTML = html;
+  if (a.lpUrl) $('btnCopyLp').onclick = function(){ copyText(a.lpUrl); };
+}
+
+function copyText(text){
+  var done = function(){ toast('コピーしました'); };
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(done, fallback);
+  } else { fallback(); }
+  function fallback(){
+    var ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); done(); } catch(e){ toast('コピーできませんでした', true); }
+    document.body.removeChild(ta);
+  }
+}
+
+function renderNotices(){
+  var ns = state.board.notices || [];
+  if (!ns.length){ $('noticeBox').innerHTML = ''; return; }
+  var html = '<div class="section-title">弊社からのお知らせ・最新資料</div><div class="card">';
+  for (var i = 0; i < ns.length; i++){
+    var n = ns[i];
+    html += '<div class="notice">' +
+      '<div class="k">' + h(n.kind || 'お知らせ') + '</div>' +
+      '<div class="t">' + h(n.title) + '</div>' +
+      (n.body ? '<div class="b">' + h(n.body) + '</div>' : '') +
+      (n.url ? '<div class="row-btn" style="margin-top:9px"><a class="btn ghost" href="' + h(n.url) + '" target="_blank" rel="noopener">' + h(n.btnLabel || '開く') + '</a></div>' : '') +
+      '</div>';
+  }
+  $('noticeBox').innerHTML = html + '</div>';
+}
+
+function renderFilters(){
+  var kinds = [['all','すべて'], [opts().kinds[0], 'お客様'], [opts().kinds[1], '代理店候補']];
+  var seg = '';
+  for (var i = 0; i < kinds.length; i++){
+    seg += '<button type="button" data-k="' + h(kinds[i][0]) + '" class="' + (state.kind === kinds[i][0] ? 'on' : '') + '">' + h(kinds[i][1]) + '</button>';
+  }
+  $('segKind').innerHTML = seg;
+  Array.prototype.forEach.call($('segKind').children, function(btn){
+    btn.onclick = function(){ state.kind = btn.getAttribute('data-k'); renderFilters(); renderList(); };
+  });
+
+  var chips = [['all','すべて'], ['__lack','要追記']].concat(opts().statuses.map(function(s){ return [s, s]; }));
+  var ch = '';
+  for (var j = 0; j < chips.length; j++){
+    ch += '<button type="button" class="chip ' + (state.status === chips[j][0] ? 'on' : '') + '" data-s="' + h(chips[j][0]) + '">' + h(chips[j][1]) + '</button>';
+  }
+  $('chipStatus').innerHTML = ch;
+  Array.prototype.forEach.call($('chipStatus').children, function(btn){
+    btn.onclick = function(){ state.status = btn.getAttribute('data-s'); renderFilters(); renderList(); };
+  });
+}
+
+function visibleReferrals(){
+  return state.board.referrals.filter(function(r){
+    if (state.kind !== 'all' && r.kind !== state.kind) return false;
+    if (state.status === '__lack') return missingOf(r).length > 0;
+    if (state.status !== 'all' && r.status !== state.status) return false;
+    return true;
+  }).sort(function(a, b){ return String(b.createdAt).localeCompare(String(a.createdAt)); });
+}
+
+function renderList(){
+  var rows = visibleReferrals();
+  if (!rows.length){
+    $('list').innerHTML = '<div class="empty">該当するご紹介はまだありません。<br>下の「＋ 紹介を登録」から追加できます。</div>';
+    return;
+  }
+  var html = '';
+  for (var i = 0; i < rows.length; i++){
+    var r = rows[i];
+    var miss = missingOf(r);
+    var isPartner = r.kind === opts().kinds[1];
+    html += '<div class="item" data-id="' + h(r.id) + '">' +
+      '<div class="top">' +
+        '<span class="nm">' + h(r.name || '（氏名未入力）') + '</span>' +
+        '<span class="badge" style="' + statusStyle(r.status) + '">' + h(r.status) + '</span>' +
+        '<span class="badge kind' + (isPartner ? ' partner' : '') + '">' + (isPartner ? '代理店候補' : 'お客様') + '</span>' +
+      '</div>' +
+      '<div class="co">' + h(r.company || '会社名未入力') + (r.product ? '　/　' + h(r.product) : '') + '</div>' +
+      '<div class="meta">' +
+        (miss.length
+          ? '<span class="badge lack">要追記: ' + h(miss.join('・')) + '</span>'
+          : '<span class="badge done">情報OK</span>') +
+        '<span>登録 ' + h(String(r.createdAt).slice(0, 10)) + '</span>' +
+      '</div>' +
+    '</div>';
+  }
+  $('list').innerHTML = html;
+  Array.prototype.forEach.call($('list').children, function(el){
+    el.onclick = function(){ openForm(el.getAttribute('data-id')); };
+  });
+}
+
+/* ---------------- form sheet ---------------- */
+function openSheet(on){
+  $('mask').classList.toggle('on', on);
+  $('sheet').classList.toggle('on', on);
+  document.body.style.overflow = on ? 'hidden' : '';
+}
+
+function openForm(id){
+  var r = null;
+  if (id){
+    var rs = state.board.referrals;
+    for (var i = 0; i < rs.length; i++) if (rs[i].id === id) r = rs[i];
+  }
+  state.editing = r;
+  state.draft = r ? {
+    kind: r.kind, company: r.company, name: r.name, email: r.email, phone: r.phone,
+    detail: r.detail, product: r.product, status: r.status, lostReason: r.lostReason
+  } : {
+    kind: opts().kinds[0], company: '', name: '', email: '', phone: '',
+    detail: '', product: '', status: opts().statuses[0], lostReason: ''
+  };
+  $('sheetTitle').textContent = r ? 'ご紹介の内容' : '紹介を登録';
+  renderForm();
+  openSheet(true);
+}
+
+function renderForm(){
+  var d = state.draft, o = opts(), r = state.editing;
+  var isCustomer = d.kind === o.kinds[0];
+  var canStatus = state.board.canEditStatus;
+
+  var html = '';
+
+  html += '<div class="f"><label>ご紹介の種類<span class="req">必須</span></label><div class="pick">' +
+    '<button type="button" data-kind="' + h(o.kinds[0]) + '" class="' + (isCustomer ? 'on' : '') + '">' +
+      '<span class="t">お客様のご紹介</span><span class="d">AIバード / AI活用研修に興味・購入検討</span></button>' +
+    '<button type="button" data-kind="' + h(o.kinds[1]) + '" class="' + (!isCustomer ? 'on' : '') + '">' +
+      '<span class="t">代理店候補のご紹介</span><span class="d">弊社商品を一緒に売ってくれそうな方</span></button>' +
+    '</div></div>';
+
+  html += field('company', '会社名', 'text', d.company, '株式会社◯◯');
+  html += field('name', '氏名', 'text', d.name, '山田 太郎', true);
+  html += field('email', 'メールアドレス', 'email', d.email, 'taro@example.com');
+  html += field('phone', '連絡の取れる番号', 'tel', d.phone, '090-1234-5678');
+
+  if (isCustomer){
+    html += '<div class="f"><label>興味のある商材</label><select id="f_product">' +
+      '<option value="">選択してください</option>' +
+      o.products.map(function(p){ return '<option value="' + h(p) + '"' + (d.product === p ? ' selected' : '') + '>' + h(p) + '</option>'; }).join('') +
+      '</select></div>';
+  }
+
+  html += '<div class="f"><label>その方の詳しい情報</label>' +
+    '<textarea id="f_detail" placeholder="どんな会社／どんな課題／どこまで話しているか／温度感 など">' + h(d.detail) + '</textarea>' +
+    '<div class="hint">分かる範囲で構いません。詳しいほど弊社から的確にアプローチできます。</div></div>';
+
+  if (canStatus){
+    html += '<div class="f"><label>ステータス</label><select id="f_status">' +
+      o.statuses.map(function(s){ return '<option value="' + h(s) + '"' + (d.status === s ? ' selected' : '') + '>' + h(s) + '</option>'; }).join('') +
+      '</select><div class="hint">弊社側でも更新します。状況が変わったらこちらでも変更できます。</div></div>';
+    if (d.status === '失注'){
+      html += '<div class="f"><label>失注の理由</label><select id="f_lostReason">' +
+        '<option value="">選択してください</option>' +
+        o.lostReasons.map(function(s){ return '<option value="' + h(s) + '"' + (d.lostReason === s ? ' selected' : '') + '>' + h(s) + '</option>'; }).join('') +
+        '</select></div>';
+    }
+  } else if (r){
+    html += '<div class="f"><label>ステータス（弊社が更新します）</label>' +
+      '<div><span class="badge" style="' + statusStyle(r.status) + '">' + h(r.status) + '</span>' +
+      (r.lostReason ? ' <span class="note">' + h(r.lostReason) + '</span>' : '') + '</div></div>';
+  }
+
+  if (r){
+    html += '<div class="card" style="padding:10px 12px;margin-top:16px;background:#fafbfc">' +
+      '<div class="kv"><div class="k">紹介ID</div><div class="v mono">' + h(r.id) + '</div></div>' +
+      '<div class="kv"><div class="k">登録日時</div><div class="v">' + h(r.createdAt) + '</div></div>' +
+      '<div class="kv"><div class="k">最終更新</div><div class="v">' + h(r.updatedAt) + (r.updatedBy ? '（' + h(r.updatedBy) + '）' : '') + '</div></div>' +
+      '</div>';
+  }
+
+  $('sheetBody').innerHTML = html;
+  $('sheetFoot').innerHTML =
+    '<button class="btn ghost" type="button" id="btnCancel">閉じる</button>' +
+    '<button class="btn primary" type="button" id="btnSave">' + (r ? '変更を保存' : 'この内容で登録') + '</button>';
+
+  Array.prototype.forEach.call($('sheetBody').querySelectorAll('[data-kind]'), function(btn){
+    btn.onclick = function(){ collect(); state.draft.kind = btn.getAttribute('data-kind'); renderForm(); };
+  });
+  var st = $('f_status');
+  if (st) st.onchange = function(){ collect(); renderForm(); };
+
+  $('btnCancel').onclick = function(){ openSheet(false); };
+  $('btnSave').onclick = save;
+}
+
+function field(key, label, type, value, ph, required){
+  return '<div class="f"><label>' + h(label) +
+    (required ? '<span class="req">必須</span>' : '<span class="opt">任意</span>') +
+    '</label><input id="f_' + key + '" type="' + type + '" value="' + h(value) + '" placeholder="' + h(ph) + '"></div>';
+}
+
+function collect(){
+  ['company','name','email','phone','detail','product','status','lostReason'].forEach(function(k){
+    var el = $('f_' + k);
+    if (el) state.draft[k] = el.value;
+  });
+}
+
+function save(){
+  collect();
+  var d = state.draft;
+  if (!String(d.name).trim()){ toast('氏名を入力してください', true); return; }
+  if (state.editing){
+    call('apiAgencyUpdateReferral', [BOOT.agency.token, state.editing.id, d], function(){
+      openSheet(false); toast('保存しました');
+    });
+  } else {
+    call('apiAgencyCreateReferral', [BOOT.agency.token, d], function(){
+      openSheet(false); toast('登録しました。ありがとうございます！');
+    });
+  }
+}
+
+/* ---------------- boot ---------------- */
+$('fab').onclick = function(){ openForm(null); };
+$('mask').onclick = function(){ openSheet(false); };
+$('sheetClose').onclick = function(){ openSheet(false); };
+$('btnRefresh').onclick = function(){
+  call('apiAgencyRefresh', [BOOT.agency.token], function(){ toast('最新の状態に更新しました'); });
+};
+document.addEventListener('visibilitychange', function(){
+  if (document.visibilityState === 'visible' && !$('sheet').classList.contains('on')){
+    google.script.run.withSuccessHandler(function(res){ state.board = res; render(); })
+      .withFailureHandler(function(){})
+      .apiAgencyRefresh(BOOT.agency.token);
+  }
+});
+
+render();
+</script>
+</body>
+</html>
