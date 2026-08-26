@@ -10,8 +10,8 @@ function doGet(e) {
   var p = (e && e.parameter) || {};
 
   try {
-    if (p.admin) return renderAdmin_(String(p.admin).trim());
-    if (p.a)     return renderAgency_(String(p.a).trim());
+    if (p.admin) return renderAdmin_(String(p.admin).trim(), p.ui);
+    if (p.a)     return renderAgency_(String(p.a).trim(), p.ui);
     return renderMessage_('URLが正しくありません',
       'このページを開くには、弊社からお渡しした専用URLをご利用ください。');
   } catch (err) {
@@ -46,7 +46,15 @@ function renderMessage_(title, message) {
 /* 画面の描画                                                           */
 /* ------------------------------------------------------------------ */
 
-function renderAgency_(token) {
+/** 使用するUIバージョン。URLの ui= が優先、なければ設定シートの値。 */
+function uiVersion_(param, settings) {
+  var v = String(param || '').trim().toLowerCase();
+  if (v === 'v1' || v === 'v2') return v;
+  var s = String((settings || getSettings_())['UIバージョン'] || 'v2').trim().toLowerCase();
+  return s === 'v1' ? 'v1' : 'v2';
+}
+
+function renderAgency_(token, uiParam) {
   var agency = findAgencyByToken_(token);
   if (!agency) {
     return renderMessage_('ページが見つかりません',
@@ -56,18 +64,21 @@ function renderAgency_(token) {
     return renderMessage_('現在ご利用いただけません',
       'このページは一時的に停止しています。弊社担当までご連絡ください。');
   }
-  var t = HtmlService.createTemplateFromFile('Agency');
-  t.boot = jsonForHtml_(agencyBoard_(agency));
+  var settings = getSettings_();
+  var file = uiVersion_(uiParam, settings) === 'v1' ? 'Agency' : 'AgencyV2';
+  var t = HtmlService.createTemplateFromFile(file);
+  t.boot = jsonForHtml_(agencyBoard_(agency, settings));
   return page_(t, agency.name + ' 様 専用ページ');
 }
 
-function renderAdmin_(token) {
+function renderAdmin_(token, uiParam) {
   var settings = getSettings_();
   var expected = String(settings['管理者トークン'] || '').trim();
   if (!expected || token !== expected) {
     return renderMessage_('アクセスできません', '管理画面のURLが正しくありません。');
   }
-  var t = HtmlService.createTemplateFromFile('Admin');
+  var file = uiVersion_(uiParam, settings) === 'v1' ? 'Admin' : 'AdminV2';
+  var t = HtmlService.createTemplateFromFile(file);
   t.boot = jsonForHtml_(adminBoard_(token));
   return page_(t, '代理店ポータル 管理画面');
 }
@@ -91,6 +102,13 @@ function publicReferral_(r) {
     product: r.product,
     status: r.status,
     lostReason: r.lostReason,
+    ownership: r.ownership,
+    rateSelf: r.rateSelf,
+    rateTarget: r.rateTarget,
+    partnerLp: r.partnerLp,
+    briefing: r.briefing,
+    briefingId: r.briefingId,
+    briefingAt: r.briefingAt,
     updatedBy: r.updatedBy
   };
 }
@@ -101,14 +119,17 @@ function optionsPayload_(settings) {
     lostReasons: optionList_(settings, '失注理由選択肢', ['その他']),
     products: optionList_(settings, '興味商材選択肢', ['AIバード', 'AI活用研修', '両方', '未定']),
     kinds: [KIND_CUSTOMER, KIND_PARTNER],
+    ownerships: OWNERSHIPS,
+    briefingStates: BRIEFING_STATES,
     requiredKeys: REQUIRED_KEYS,
     requiredLabels: REQUIRED_LABELS,
-    statusColors: STATUS_COLORS
+    statusColors: STATUS_COLORS,
+    variables: COPY_VARIABLES
   };
 }
 
-function agencyBoard_(agency) {
-  var settings = getSettings_();
+function agencyBoard_(agency, settings) {
+  settings = settings || getSettings_();
   return {
     agency: {
       id: agency.id,
@@ -116,13 +137,19 @@ function agencyBoard_(agency) {
       contact: agency.contact,
       lpUrl: agency.lpUrl,
       lpNote: agency.lpNote,
+      rate: normalizeRate_(agency.rate, 20),
       token: agency.token
     },
     company: settings['会社名'] || '弊社',
     intro: settings['代理店ページの案内文'] || '',
     canEditStatus: String(settings['代理店によるステータス編集'] || '許可') === '許可',
+    goal: Math.max(parseInt(settings['紹介の目標件数'], 10) || 10, 1),
+    tossRate: normalizeRate_(settings['トスアップ時の紹介元マージン(%)'], 3),
+    individualUrl: String(settings['個別日程調整URL'] || '').trim(),
+    aiRewrite: claudeEnabled_(settings),
     options: optionsPayload_(settings),
     notices: noticesForAgency_(agency.id),
+    briefings: openBriefings_(),
     referrals: listReferralsByAgency_(agency.id).map(publicReferral_)
   };
 }
@@ -157,10 +184,31 @@ function adminBoard_(token) {
         agencyId: r.agencyId, agencyName: r.agencyName, kind: r.kind,
         company: r.company, name: r.name, email: r.email, phone: r.phone,
         detail: r.detail, product: r.product, status: r.status,
-        lostReason: r.lostReason, nextAction: r.nextAction, memo: r.memo,
-        updatedBy: r.updatedBy
+        lostReason: r.lostReason, ownership: r.ownership,
+        rateSelf: r.rateSelf, rateTarget: r.rateTarget, partnerLp: r.partnerLp,
+        briefing: r.briefing, briefingId: r.briefingId, briefingAt: r.briefingAt,
+        nextAction: r.nextAction, memo: r.memo, updatedBy: r.updatedBy
       };
-    })
+    }),
+    briefings: listBriefings_().map(function (b) {
+      return {
+        id: b.id, startAt: b.startAt, kind: b.kind, capacity: b.capacity,
+        url: b.url, note: b.note, open: isTrue_(b.open), booked: b.booked
+      };
+    }),
+    templates: readAll_(SHEETS.TEMPLATE, TEMPLATE_FIELDS).map(function (t) {
+      return {
+        id: t.id, order: t.order, target: t.target, channel: t.channel,
+        angle: t.angle, title: t.title, body: t.body, open: isTrue_(t.open)
+      };
+    }),
+    settings: {
+      goal: Math.max(parseInt(settings['紹介の目標件数'], 10) || 10, 1),
+      tossRate: normalizeRate_(settings['トスアップ時の紹介元マージン(%)'], 3),
+      individualUrl: String(settings['個別日程調整URL'] || '').trim(),
+      aiRewrite: claudeEnabled_(settings),
+      uiVersion: uiVersion_(null, settings)
+    }
   };
 }
 
@@ -168,9 +216,11 @@ function adminBoard_(token) {
 /* 代理店マイページから呼ばれるAPI                                      */
 /* ------------------------------------------------------------------ */
 
-var AGENCY_EDITABLE = ['kind', 'company', 'name', 'email', 'phone', 'detail', 'product'];
+var AGENCY_EDITABLE = ['kind', 'company', 'name', 'email', 'phone', 'detail', 'product',
+                       'ownership', 'rateSelf', 'rateTarget', 'briefing', 'briefingId'];
 var ADMIN_EDITABLE = ['kind', 'company', 'name', 'email', 'phone', 'detail', 'product',
-                      'status', 'lostReason', 'nextAction', 'memo'];
+                      'status', 'lostReason', 'ownership', 'rateSelf', 'rateTarget', 'partnerLp',
+                      'briefing', 'briefingId', 'nextAction', 'memo'];
 
 function requireAgency_(token) {
   var agency = findAgencyByToken_(token);
@@ -188,6 +238,12 @@ function requireAdmin_(token) {
 /** 最新状態を取り直す（引っぱって更新／他端末の変更の反映） */
 function apiAgencyRefresh(token) {
   return agencyBoard_(requireAgency_(token));
+}
+
+/** 紹介文をつくる */
+function apiAgencyGenerateCopy(token, req) {
+  var agency = requireAgency_(token);
+  return generateCopy_(agency, req || {}, getSettings_());
 }
 
 function apiAgencyCreateReferral(token, payload) {
@@ -251,5 +307,17 @@ function apiAdminRotateAgencyToken(token, agencyId) {
 function apiAdminSaveNotice(token, payload) {
   requireAdmin_(token);
   saveNotice_(payload || {});
+  return adminBoard_(token);
+}
+
+function apiAdminSaveBriefing(token, payload) {
+  requireAdmin_(token);
+  saveBriefing_(payload || {});
+  return adminBoard_(token);
+}
+
+function apiAdminSaveTemplate(token, payload) {
+  requireAdmin_(token);
+  saveTemplate_(payload || {});
   return adminBoard_(token);
 }

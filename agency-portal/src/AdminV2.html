@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <base target="_top">
+  <?!= include('StyleV2'); ?>
+  <style>body{padding-bottom:48px}</style>
+</head>
+<body>
+
+<div class="hd adm-hd">
+  <div class="wrap admin hd-row">
+    <div>
+      <div class="co">ADMIN CONSOLE</div>
+      <h1 id="hdName"></h1>
+      <div class="rule"></div>
+    </div>
+    <div style="display:flex;gap:7px">
+      <a class="ghost-btn" id="btnSheet" href="#" target="_blank" rel="noopener">スプレッドシート</a>
+      <button class="ghost-btn" id="btnRefresh" type="button">更新</button>
+    </div>
+  </div>
+</div>
+
+<div class="tabs" id="tabs">
+  <button type="button" data-t="dash" class="on">ダッシュボード</button>
+  <button type="button" data-t="ref">紹介一覧</button>
+  <button type="button" data-t="ag">代理店</button>
+  <button type="button" data-t="nt">お知らせ・LP</button>
+  <button type="button" data-t="bf">説明会日程</button>
+  <button type="button" data-t="tp">文面テンプレート</button>
+</div>
+
+<div class="wrap admin" id="view" style="padding-top:20px"></div>
+
+<div class="mask" id="mask"></div>
+<div class="sheet" id="sheet">
+  <div class="sheet-hd"><h2 id="sheetTitle"></h2><button class="x" id="sheetClose" type="button">×</button></div>
+  <div class="sheet-bd" id="sheetBody"></div>
+  <div class="sheet-ft" id="sheetFoot"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="veil" id="veil"><div class="spin"></div><div class="msg" id="veilMsg"></div></div>
+
+<script>
+var BOOT = <?!= boot ?>;
+var TOKEN = BOOT.token;
+var state = { board: BOOT, tab: 'dash', f: { agency:'all', kind:'all', status:'all', q:'' }, draft: {}, mode: null };
+
+function $(id){ return document.getElementById(id); }
+function h(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function veil(on,msg){ $('veilMsg').textContent = msg||''; $('veil').classList.toggle('on', !!on); }
+var toastTimer=null;
+function toast(msg,isErr){
+  var t=$('toast'); t.textContent=msg; t.classList.toggle('err',!!isErr); t.classList.add('on');
+  clearTimeout(toastTimer); toastTimer=setTimeout(function(){ t.classList.remove('on'); }, isErr?4200:2600);
+}
+function b(){ return state.board; }
+function opts(){ return b().options; }
+function isPartner(r){ return r.kind === opts().kinds[1]; }
+function statusStyle(s){
+  var c = (opts().statusColors||{})[s] || { bg:'#f1efe9', fg:'#6e685e' };
+  return 'background:'+c.bg+';color:'+c.fg;
+}
+function missingOf(r){
+  var o=opts(), out=[];
+  for (var i=0;i<o.requiredKeys.length;i++){
+    var k=o.requiredKeys[i];
+    if (!String(r[k]||'').trim()) out.push(o.requiredLabels[k]||k);
+  }
+  return out;
+}
+function call(fn,args,onDone,msg){
+  veil(true,msg);
+  var r = google.script.run
+    .withSuccessHandler(function(res){ veil(false); state.board=res; render(); if(onDone) onDone(res); })
+    .withFailureHandler(function(err){ veil(false); toast((err&&err.message)?err.message:'通信に失敗しました', true); });
+  r[fn].apply(r,args);
+}
+function copyText(text){
+  var done=function(){ toast('コピーしました'); };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fb); else fb();
+  function fb(){
+    var ta=document.createElement('textarea'); ta.value=text; ta.style.position='fixed'; ta.style.opacity='0';
+    document.body.appendChild(ta); ta.select();
+    try{ document.execCommand('copy'); done(); }catch(e){ toast('コピーできませんでした',true); }
+    document.body.removeChild(ta);
+  }
+}
+function openSheet(on){
+  $('mask').classList.toggle('on',on); $('sheet').classList.toggle('on',on);
+  document.body.style.overflow = on ? 'hidden' : '';
+}
+function inp(key,label,value,opt){
+  return '<div class="f"><label>'+h(label)+(opt?'<span class="opt">'+h(opt)+'</span>':'')+
+    '</label><input id="f_'+key+'" type="text" value="'+h(value===undefined?'':value)+'"></div>';
+}
+function sel(key,label,pairs,value,opt){
+  return '<div class="f"><label>'+h(label)+(opt?'<span class="opt">'+h(opt)+'</span>':'')+'</label><select id="f_'+key+'">'+
+    pairs.map(function(p){ return '<option value="'+h(p[0])+'"'+(String(value)===String(p[0])?' selected':'')+'>'+h(p[1])+'</option>'; }).join('')+
+    '</select></div>';
+}
+function area(key,label,value,opt){
+  return '<div class="f"><label>'+h(label)+(opt?'<span class="opt">'+h(opt)+'</span>':'')+
+    '</label><textarea id="f_'+key+'">'+h(value===undefined?'':value)+'</textarea></div>';
+}
+function bindCopy(root){
+  Array.prototype.forEach.call((root||$('view')).querySelectorAll('[data-copy]'), function(x){
+    x.onclick=function(e){ e.stopPropagation(); copyText(x.getAttribute('data-copy')); };
+  });
+  Array.prototype.forEach.call((root||$('view')).querySelectorAll('a[href]'), function(x){
+    x.onclick=function(e){ e.stopPropagation(); };
+  });
+}
+
+/* ================= render ================= */
+function render(){
+  $('hdName').textContent = b().company + ' 代理店ポータル 管理画面';
+  $('btnSheet').href = b().sheetUrl || '#';
+  Array.prototype.forEach.call($('tabs').children, function(x){
+    x.classList.toggle('on', x.getAttribute('data-t') === state.tab);
+  });
+  ({ dash:renderDash, ref:renderRefs, ag:renderAgencies, nt:renderNotices, bf:renderBriefings, tp:renderTemplates })[state.tab]();
+}
+
+/* ---------------- dashboard ---------------- */
+function renderDash(){
+  var rs = b().referrals;
+  var cnt = function(f){ var c=0; for (var i=0;i<rs.length;i++) if (f(rs[i])) c++; return c; };
+  var by = {};
+  opts().statuses.forEach(function(s){ by[s] = cnt(function(r){ return r.status===s; }); });
+
+  var kpis = [
+    ['総紹介数', rs.length, ''],
+    ['稼働中', by['稼働中']||0, 'ok'],
+    ['商談中', by['商談中']||0, 'wa'],
+    ['アプローチ中', by['アプローチ中']||0, 'wa'],
+    ['新規（未着手）', by['新規']||0, 'wa'],
+    ['失注', by['失注']||0, 'ng'],
+    ['情報不足', cnt(function(r){ return missingOf(r).length>0; }), 'ng'],
+    ['説明会 予約確定', cnt(function(r){ return r.briefing==='予約確定'; }), ''],
+    ['お客様紹介', cnt(function(r){ return !isPartner(r); }), ''],
+    ['代理店紹介', cnt(function(r){ return isPartner(r); }), ''],
+    ['代理店数（有効）', b().agencies.filter(function(a){ return a.active!=='停止'; }).length, '']
+  ];
+  var html = '<div class="sec-hd"><h2>全体サマリ</h2></div><div class="kpis">' +
+    kpis.map(function(k){ return '<div class="'+k[2]+'"><div class="n">'+k[1]+'</div><div class="l">'+h(k[0])+'</div></div>'; }).join('') +
+    '</div>';
+
+  var statuses = opts().statuses;
+  html += '<div class="sec"><div class="sec-hd"><h2>代理店別の内訳（稼働中の多い順）</h2></div>' +
+    '<div class="scroll-x"><table class="tbl"><thead><tr><th>代理店</th><th>基本%</th><th>お客様</th><th>代理店候補</th>' +
+    statuses.map(function(s){ return '<th>'+h(s)+'</th>'; }).join('') + '<th>情報不足</th><th>合計</th></tr></thead><tbody>';
+
+  b().agencies.map(function(a){
+    var mine = rs.filter(function(r){ return r.agencyId===a.id; });
+    return { a:a, mine:mine, active: mine.filter(function(r){ return r.status==='稼働中'; }).length };
+  }).sort(function(x,y){ return y.active-x.active || y.mine.length-x.mine.length; })
+    .forEach(function(d){
+      var mine = d.mine;
+      html += '<tr class="clickable" data-agency="'+h(d.a.id)+'">' +
+        '<td><b>'+h(d.a.name)+'</b>'+(d.a.active==='停止'?' <span class="tag line">停止</span>':'')+'</td>' +
+        '<td class="n">'+h(d.a.rate)+'%</td>' +
+        '<td class="n">'+(mine.filter(function(r){ return !isPartner(r); }).length||'')+'</td>' +
+        '<td class="n">'+(mine.filter(function(r){ return isPartner(r); }).length||'')+'</td>' +
+        statuses.map(function(s){
+          var v = mine.filter(function(r){ return r.status===s; }).length;
+          return '<td class="n'+(s==='稼働中'&&v>0?' hl':'')+'">'+(v||'')+'</td>';
+        }).join('') +
+        '<td class="n">'+(mine.filter(function(r){ return missingOf(r).length>0; }).length||'')+'</td>' +
+        '<td class="n">'+mine.length+'</td></tr>';
+    });
+  html += '</tbody></table></div><p class="tiny" style="margin-top:10px">行をクリックすると、その代理店の紹介一覧に移動します。同じ集計はスプレッドシートの［ダッシュボード］シートにも入っています。</p></div>';
+
+  $('view').innerHTML = html;
+  Array.prototype.forEach.call($('view').querySelectorAll('[data-agency]'), function(tr){
+    tr.onclick = function(){
+      state.f = { agency: tr.getAttribute('data-agency'), kind:'all', status:'all', q:'' };
+      state.tab='ref'; render();
+    };
+  });
+}
+
+/* ---------------- referrals ---------------- */
+function filteredRefs(){
+  var f = state.f, q = f.q.trim().toLowerCase();
+  return b().referrals.filter(function(r){
+    if (f.agency!=='all' && r.agencyId!==f.agency) return false;
+    if (f.kind!=='all' && r.kind!==f.kind) return false;
+    if (f.status==='__lack'){ if (!missingOf(r).length) return false; }
+    else if (f.status!=='all' && r.status!==f.status) return false;
+    if (q){
+      var hay=[r.name,r.company,r.email,r.phone,r.detail,r.memo,r.agencyName].join(' ').toLowerCase();
+      if (hay.indexOf(q)<0) return false;
+    }
+    return true;
+  }).sort(function(x,y){ return String(y.createdAt).localeCompare(String(x.createdAt)); });
+}
+
+function renderRefs(){
+  var f = state.f;
+  $('view').innerHTML = '<div class="filters">' +
+    '<select id="fAgency"><option value="all">すべての代理店</option>' +
+      b().agencies.map(function(a){ return '<option value="'+h(a.id)+'"'+(f.agency===a.id?' selected':'')+'>'+h(a.name)+'</option>'; }).join('') + '</select>' +
+    '<select id="fKind"><option value="all">すべての種別</option>' +
+      opts().kinds.map(function(k){ return '<option value="'+h(k)+'"'+(f.kind===k?' selected':'')+'>'+h(k)+'</option>'; }).join('') + '</select>' +
+    '<select id="fStatus"><option value="all">すべてのステータス</option><option value="__lack"'+(f.status==='__lack'?' selected':'')+'>情報不足のみ</option>' +
+      opts().statuses.map(function(s){ return '<option value="'+h(s)+'"'+(f.status===s?' selected':'')+'>'+h(s)+'</option>'; }).join('') + '</select>' +
+    '<input id="fQ" type="search" placeholder="氏名・会社名・メモなどで検索" value="'+h(f.q)+'">' +
+    '<button class="btn sm" type="button" id="btnNewRef">＋ 弊社から登録</button>' +
+    '</div><div id="refTable"></div>';
+  $('fAgency').onchange=function(){ state.f.agency=this.value; renderRefTable(); };
+  $('fKind').onchange  =function(){ state.f.kind=this.value; renderRefTable(); };
+  $('fStatus').onchange=function(){ state.f.status=this.value; renderRefTable(); };
+  $('fQ').oninput      =function(){ state.f.q=this.value; renderRefTable(); };
+  $('btnNewRef').onclick=function(){ openRefForm(null); };
+  renderRefTable();
+}
+
+/** 代理店候補の条件（管理方式・取り分・LP発行状況）を1セルにまとめる */
+function termsCell(r){
+  var self = String(r.rateSelf || '').trim();
+  var tgt  = String(r.rateTarget || '').trim();
+  var rates = '';
+  if (r.ownership === opts().ownerships[1]){
+    if (self !== '' || tgt !== '') rates = '紹介元 ' + (self||0) + '% / 候補 ' + (tgt||0) + '%';
+  } else if (self !== ''){
+    rates = '紹介元 ' + self + '%';
+  }
+  return h(r.ownership || '未設定') +
+    (rates ? '<div class="tiny">' + h(rates) + '</div>' : '') +
+    (r.partnerLp ? '<div class="tiny">LP発行済</div>' : '<div class="tiny" style="color:var(--amber)">LP未発行</div>');
+}
+
+function renderRefTable(){
+  var rows = filteredRefs();
+  var html = '<div class="scroll-x"><table class="tbl"><thead><tr>' +
+    '<th>氏名 / 会社</th><th>種別</th><th>代理店</th><th>ステータス</th><th>条件</th><th>説明会</th><th>連絡先</th><th>情報</th><th>登録</th><th>弊社メモ</th>' +
+    '</tr></thead><tbody>';
+  if (!rows.length) html += '<tr><td colspan="10" style="text-align:center;color:var(--ink-3);padding:30px">該当する紹介はありません</td></tr>';
+  rows.forEach(function(r){
+    var miss = missingOf(r);
+    html += '<tr class="clickable" data-id="'+h(r.id)+'">' +
+      '<td><b>'+h(r.name||'（未入力）')+'</b><div class="tiny">'+h(r.company||'—')+(r.product?' / '+h(r.product):'')+'</div></td>' +
+      '<td>'+(isPartner(r)?'代理店候補':'お客様')+'</td>' +
+      '<td>'+h(r.agencyName)+'</td>' +
+      '<td><span class="tag" style="'+statusStyle(r.status)+'">'+h(r.status)+'</span>'+(r.lostReason?'<div class="tiny">'+h(r.lostReason)+'</div>':'')+'</td>' +
+      '<td>'+(isPartner(r) ? termsCell(r) : '—')+'</td>' +
+      '<td>'+h(r.briefing||'—')+(r.briefingAt?'<div class="tiny">'+h(r.briefingAt)+'</div>':'')+'</td>' +
+      '<td class="mono">'+h(r.email||'—')+'<br>'+h(r.phone||'—')+'</td>' +
+      '<td>'+(miss.length?'<span class="tag warn">要追記</span><div class="tiny">'+h(miss.join('・'))+'</div>':'<span class="tag ok">OK</span>')+'</td>' +
+      '<td class="tiny">'+h(String(r.createdAt).slice(0,10))+'</td>' +
+      '<td class="tiny">'+h(r.memo||'')+'</td></tr>';
+  });
+  html += '</tbody></table></div><p class="tiny" style="margin-top:10px">'+rows.length+' 件を表示中。行をクリックすると編集できます。</p>';
+  $('refTable').innerHTML = html;
+  Array.prototype.forEach.call($('refTable').querySelectorAll('[data-id]'), function(tr){
+    tr.onclick=function(){ openRefForm(tr.getAttribute('data-id')); };
+  });
+}
+
+function openRefForm(id){
+  var r=null; b().referrals.forEach(function(x){ if (x.id===id) r=x; });
+  state.mode = r ? 'refEdit' : 'refNew';
+  state.draft = r ? JSON.parse(JSON.stringify(r)) : {
+    agencyId: state.f.agency!=='all' ? state.f.agency : (b().agencies[0]||{}).id,
+    kind: opts().kinds[0], company:'', name:'', email:'', phone:'', detail:'', product:'',
+    status: opts().statuses[0], lostReason:'', ownership:'', rateSelf:'', rateTarget:'',
+    partnerLp:'', briefing: opts().briefingStates[0], briefingId:'', nextAction:'', memo:''
+  };
+  $('sheetTitle').textContent = r ? '紹介を編集' : '紹介を登録（弊社入力）';
+  renderRefForm(); openSheet(true);
+}
+
+function renderRefForm(){
+  var d=state.draft, o=opts(), isNew = state.mode==='refNew';
+  var agency = null;
+  b().agencies.forEach(function(a){ if (a.id === d.agencyId) agency = a; });
+  var base = agency ? Number(agency.rate || 20) : 20;
+
+  var html='';
+  if (isNew) html += sel('agencyId','どの代理店からの紹介か', b().agencies.map(function(a){ return [a.id,a.name]; }), d.agencyId);
+  else html += '<div class="f"><label>代理店</label><div>'+h(d.agencyName)+'（基本 '+h(base)+'%）</div></div>';
+
+  html += sel('kind','種別', o.kinds.map(function(k){ return [k,k]; }), d.kind);
+  html += inp('company','会社名',d.company) + inp('name','氏名',d.name) +
+          inp('email','メールアドレス',d.email) + inp('phone','電話番号',d.phone);
+  if (!isPartner(d)) html += sel('product','興味商材',[['','未選択']].concat(o.products.map(function(p){ return [p,p]; })),d.product);
+  html += area('detail','詳しい情報',d.detail);
+  html += sel('status','ステータス', o.statuses.map(function(s){ return [s,s]; }), d.status);
+  if (d.status==='失注') html += sel('lostReason','失注理由',[['','未選択']].concat(o.lostReasons.map(function(s){ return [s,s]; })),d.lostReason);
+
+  if (isPartner(d)){
+    var sum = (Number(d.rateSelf)||0) + (Number(d.rateTarget)||0);
+    html += '<div class="fieldset"><div class="legend">代理店候補の条件</div>' +
+      sel('ownership','管理方式', o.ownerships.map(function(x){ return [x,x]; }), d.ownership) +
+      '<div class="f2">' +
+        '<div class="f"><label>紹介元（代理店）の取り分</label><div class="split"><input id="f_rateSelf" type="number" step="0.5" min="0" max="100" value="'+h(d.rateSelf)+'"><span class="eq">%</span></div></div>' +
+        (d.ownership === o.ownerships[1]
+          ? '<div class="f"><label>候補の取り分</label><div class="split"><input id="f_rateTarget" type="number" step="0.5" min="0" max="100" value="'+h(d.rateTarget)+'"><span class="eq">%</span></div></div>'
+          : '<div class="f"><label>候補の取り分</label><div class="tiny" style="padding-top:11px">トスアップのため、弊社と候補の直接契約になります。</div></div>') +
+      '</div>' +
+      (d.ownership === o.ownerships[1]
+        ? '<div class="bal '+(sum>base+0.001?'ng':'ok')+'">合計 '+sum+'% / 基本 '+base+'%</div>'
+        : '<div class="tiny">トスアップ時の既定値は設定シートの「トスアップ時の紹介元マージン(%)」＝'+h(b().settings.tossRate)+'% です。</div>') +
+      inp('partnerLp','この候補にお渡しするLP URL', d.partnerLp, '代理店のマイページに表示されます') +
+      '</div>';
+  }
+
+  html += '<div class="fieldset"><div class="legend">説明会</div>' +
+    sel('briefing','状況', o.briefingStates.map(function(s){ return [s,s]; }), d.briefing) +
+    sel('briefingId','日程', [['','（未定・個別調整）']].concat(b().briefings.map(function(x){
+      return [x.id, x.startAt+'　'+x.kind];
+    })), d.briefingId) +
+    (d.briefingAt ? '<div class="tiny">記録されている日時：'+h(d.briefingAt)+'</div>' : '') + '</div>';
+
+  html += '<div class="f"><label>次回アクション日<span class="opt">社内</span></label><input id="f_nextAction" type="date" value="'+h(d.nextAction)+'"></div>';
+  html += area('memo','弊社メモ',d.memo,'代理店には表示されません');
+
+  if (!isNew){
+    html += '<div class="panel pad" style="background:var(--card-2)">' +
+      '<div class="kv"><div class="k">紹介ID</div><div class="v mono">'+h(d.id)+'</div></div>' +
+      '<div class="kv"><div class="k">登録</div><div class="v">'+h(d.createdAt)+'</div></div>' +
+      '<div class="kv"><div class="k">最終更新</div><div class="v">'+h(d.updatedAt)+'（'+h(d.updatedBy)+'）</div></div></div>';
+  }
+
+  $('sheetBody').innerHTML = html;
+  $('sheetFoot').innerHTML = '<button class="btn plain" type="button" id="btnCancel">閉じる</button><button class="btn" type="button" id="btnSave">保存</button>';
+  ['kind','status','ownership','agencyId'].forEach(function(k){
+    var el=$('f_'+k); if (el) el.onchange=function(){ collectRef(); renderRefForm(); };
+  });
+  ['rateSelf','rateTarget'].forEach(function(k){
+    var el=$('f_'+k); if (el) el.oninput=function(){ collectRef(); renderRefForm(); var e2=$('f_'+k); if(e2) e2.focus(); };
+  });
+  $('btnCancel').onclick=function(){ openSheet(false); };
+  $('btnSave').onclick=function(){
+    collectRef();
+    var d2=state.draft;
+    if (!String(d2.name).trim()){ toast('氏名を入力してください',true); return; }
+    if (state.mode==='refNew') call('apiAdminCreateReferral',[TOKEN,d2.agencyId,d2],function(){ openSheet(false); toast('登録しました'); },'登録しています');
+    else call('apiAdminUpdateReferral',[TOKEN,d2.id,d2],function(){ openSheet(false); toast('保存しました'); },'保存しています');
+  };
+}
+function collectRef(){
+  ['agencyId','kind','company','name','email','phone','detail','product','status','lostReason',
+   'ownership','rateSelf','rateTarget','partnerLp','briefing','briefingId','nextAction','memo'].forEach(function(k){
+    var el=$('f_'+k); if (el) state.draft[k]=el.value;
+  });
+}
+
+/* ---------------- agencies ---------------- */
+function renderAgencies(){
+  var rs = b().referrals;
+  var html = '<div class="filters"><button class="btn sm" type="button" id="btnNewAg">＋ 代理店を追加</button>' +
+    '<span class="tiny" style="align-self:center">マイページURLを代理店にお渡しし、LINEのトークにピン留めしてもらってください。</span></div>' +
+    '<div class="scroll-x"><table class="tbl"><thead><tr>' +
+    '<th>代理店</th><th>担当者 / 連絡先</th><th>基本%</th><th>マイページURL</th><th>専用LP</th><th>紹介数</th><th>稼働中</th><th>状態</th>' +
+    '</tr></thead><tbody>';
+  if (!b().agencies.length) html += '<tr><td colspan="8" style="text-align:center;color:var(--ink-3);padding:30px">まだ代理店が登録されていません</td></tr>';
+  b().agencies.forEach(function(a){
+    var mine = rs.filter(function(r){ return r.agencyId===a.id; });
+    var act = mine.filter(function(r){ return r.status==='稼働中'; }).length;
+    html += '<tr class="clickable" data-ag="'+h(a.id)+'">' +
+      '<td><b>'+h(a.name)+'</b><div class="tiny mono">'+h(a.id)+'</div></td>' +
+      '<td>'+h(a.contact||'—')+'<div class="tiny mono">'+h(a.email||'')+'</div></td>' +
+      '<td class="n">'+h(a.rate)+'%</td>' +
+      '<td>'+(a.mypageUrl
+        ? '<div class="mono">'+h(a.mypageUrl)+'</div><button class="btn plain sm" style="margin-top:5px" type="button" data-copy="'+h(a.mypageUrl)+'">コピー</button>'
+        : '<span class="tiny">設定シートに「ウェブアプリURL」を入れると生成されます</span>')+'</td>' +
+      '<td>'+(a.lpUrl?'<a class="mono" href="'+h(a.lpUrl)+'" target="_blank" rel="noopener">'+h(a.lpUrl)+'</a>':'<span class="tiny">未設定</span>')+'</td>' +
+      '<td class="n">'+mine.length+'</td>' +
+      '<td class="n'+(act?' hl':'')+'">'+(act||'')+'</td>' +
+      '<td>'+(a.active==='停止'?'<span class="tag line">停止</span>':'<span class="tag ok">有効</span>')+'</td></tr>';
+  });
+  html += '</tbody></table></div><p class="tiny" style="margin-top:10px">行をクリックすると、代理店名・基本マージン率・専用LP・状態を編集できます。</p>';
+  $('view').innerHTML = html;
+  $('btnNewAg').onclick=function(){ openAgForm(null); };
+  Array.prototype.forEach.call($('view').querySelectorAll('[data-ag]'), function(tr){
+    tr.onclick=function(){ openAgForm(tr.getAttribute('data-ag')); };
+  });
+  bindCopy();
+}
+
+function openAgForm(id){
+  var a=null; b().agencies.forEach(function(x){ if (x.id===id) a=x; });
+  state.draft = a ? JSON.parse(JSON.stringify(a)) : { name:'', contact:'', email:'', phone:'', lpUrl:'', lpNote:'', rate:20, active:'有効', memo:'' };
+  $('sheetTitle').textContent = a ? '代理店を編集' : '代理店を追加';
+  var d=state.draft;
+  var html = inp('name','代理店名（必須）',d.name) + inp('contact','担当者名',d.contact) +
+    inp('email','メールアドレス',d.email) + inp('phone','電話番号',d.phone) +
+    '<div class="f"><label>基本マージン率</label><div class="split"><input id="f_rate" type="number" step="0.5" min="0" max="100" value="'+h(d.rate)+'"><span class="eq">%</span></div>' +
+      '<div class="hint">この代理店が受け取る受注額に対する割合です。代理店候補の取り分は、この範囲内で分け合います。</div></div>' +
+    '<div class="f"><label>専用 AI研修説明LP の URL</label><input id="f_lpUrl" type="url" value="'+h(d.lpUrl)+'" placeholder="https://example.com/ai-training?ref=AG-001">' +
+      '<div class="hint">ここに貼ると、代理店のマイページに即座に反映されます。</div></div>' +
+    inp('lpNote','LPの補足（代理店に表示）',d.lpNote) +
+    sel('active','状態',[['有効','有効'],['停止','停止（マイページを閉じる）']],d.active) +
+    area('memo','備考',d.memo,'社内');
+  if (a){
+    html += '<div class="panel pad" style="background:var(--card-2)">' +
+      '<div class="kv"><div class="k">マイページ</div><div class="v mono">'+h(a.mypageUrl||'（ウェブアプリURL未設定）')+'</div></div>' +
+      '<div class="kv"><div class="k">登録日</div><div class="v">'+h(a.createdAt)+'</div></div></div>' +
+      '<div class="btns"><button class="btn danger" type="button" id="btnRotate">URLを再発行（今のURLを無効化）</button></div>';
+  }
+  $('sheetBody').innerHTML = html;
+  $('sheetFoot').innerHTML = '<button class="btn plain" type="button" id="btnCancel">閉じる</button><button class="btn" type="button" id="btnSave">保存</button>';
+  $('btnCancel').onclick=function(){ openSheet(false); };
+  $('btnSave').onclick=function(){
+    ['name','contact','email','phone','rate','lpUrl','lpNote','active','memo'].forEach(function(k){
+      var el=$('f_'+k); if (el) state.draft[k]=el.value;
+    });
+    if (!String(state.draft.name).trim()){ toast('代理店名を入力してください',true); return; }
+    call('apiAdminSaveAgency',[TOKEN,state.draft],function(){ openSheet(false); toast('保存しました'); },'保存しています');
+  };
+  if ($('btnRotate')){
+    $('btnRotate').onclick=function(){
+      if (!confirm('新しいURLを発行します。代理店がLINEにピン留めしている今のURLは開けなくなります。よろしいですか？')) return;
+      call('apiAdminRotateAgencyToken',[TOKEN,a.id],function(){ openSheet(false); toast('URLを再発行しました'); },'発行しています');
+    };
+  }
+  openSheet(true);
+}
+
+/* ---------------- notices ---------------- */
+function renderNotices(){
+  var html = '<div class="filters"><button class="btn sm" type="button" id="btnNewNt">＋ お知らせ・LPを追加</button>' +
+    '<span class="tiny" style="align-self:center">ここに載せた内容は、代理店のマイページにすぐ反映されます。</span></div>' +
+    '<div class="scroll-x"><table class="tbl"><thead><tr><th>表示順</th><th>種別</th><th>タイトル</th><th>本文</th><th>リンク</th><th>対象</th><th>掲載</th></tr></thead><tbody>';
+  var ns = b().notices.slice().sort(function(x,y){ return (Number(x.order)||999)-(Number(y.order)||999); });
+  if (!ns.length) html += '<tr><td colspan="7" style="text-align:center;color:var(--ink-3);padding:30px">まだ登録がありません</td></tr>';
+  ns.forEach(function(n){
+    html += '<tr class="clickable" data-nt="'+h(n.id)+'"><td class="n">'+h(n.order)+'</td><td>'+h(n.kind)+'</td>' +
+      '<td><b>'+h(n.title)+'</b></td><td class="tiny">'+h(String(n.body).slice(0,60))+(String(n.body).length>60?'…':'')+'</td>' +
+      '<td class="mono">'+h(n.url||'—')+'</td><td>'+h(n.target||'全体')+'</td>' +
+      '<td>'+(n.published?'<span class="tag ok">掲載中</span>':'<span class="tag line">下書き</span>')+'</td></tr>';
+  });
+  $('view').innerHTML = html + '</tbody></table></div>';
+  $('btnNewNt').onclick=function(){ openNtForm(null); };
+  Array.prototype.forEach.call($('view').querySelectorAll('[data-nt]'), function(tr){
+    tr.onclick=function(){ openNtForm(tr.getAttribute('data-nt')); };
+  });
+}
+function openNtForm(id){
+  var n=null; b().notices.forEach(function(x){ if (x.id===id) n=x; });
+  state.draft = n ? JSON.parse(JSON.stringify(n)) : { id:'', order:'10', kind:'最新LP', title:'', body:'', url:'', btnLabel:'開く', target:'全体', published:true };
+  $('sheetTitle').textContent = n ? 'お知らせを編集' : 'お知らせ・LPを追加';
+  var d=state.draft;
+  $('sheetBody').innerHTML =
+    sel('kind','種別',[['最新LP','最新LP'],['お知らせ','お知らせ'],['資料','資料']],d.kind) +
+    inp('title','タイトル（必須）',d.title) + area('body','本文',d.body) +
+    inp('url','リンクURL',d.url) + inp('btnLabel','ボタン文言',d.btnLabel) +
+    sel('target','表示する代理店',[['全体','すべての代理店']].concat(b().agencies.map(function(a){ return [a.id,a.name+' のみ']; })),d.target) +
+    inp('order','表示順（小さいほど上）',d.order) +
+    sel('published','掲載',[['1','掲載する'],['0','下書き（非掲載）']], d.published?'1':'0');
+  $('sheetFoot').innerHTML='<button class="btn plain" type="button" id="btnCancel">閉じる</button><button class="btn" type="button" id="btnSave">保存</button>';
+  $('btnCancel').onclick=function(){ openSheet(false); };
+  $('btnSave').onclick=function(){
+    ['kind','title','body','url','btnLabel','target','order'].forEach(function(k){ var el=$('f_'+k); if (el) state.draft[k]=el.value; });
+    state.draft.published = $('f_published').value==='1';
+    if (!String(state.draft.title).trim()){ toast('タイトルを入力してください',true); return; }
+    call('apiAdminSaveNotice',[TOKEN,state.draft],function(){ openSheet(false); toast('保存しました'); },'保存しています');
+  };
+  openSheet(true);
+}
+
+/* ---------------- briefings ---------------- */
+function renderBriefings(){
+  var html = '<div class="filters"><button class="btn sm" type="button" id="btnNewBf">＋ 日程を追加</button>' +
+    '<span class="tiny" style="align-self:center">週2回の代理店向け説明会など、選ばせたい日時をここに登録します。個別調整用の予約URL（TimeRex等）は［設定］シートの「個別日程調整URL」に入れてください。</span></div>';
+  if (!b().settings.individualUrl){
+    html += '<div class="flag" style="margin-bottom:12px"><div class="t">個別日程調整URLが未設定です。日程が合わない方をご案内できるよう、設定シートに予約ページのURLを入れてください。</div></div>';
+  }
+  html += '<div class="scroll-x"><table class="tbl"><thead><tr><th>ID</th><th>開催日時</th><th>対象</th><th>定員</th><th>申込</th><th>参加URL</th><th>備考</th><th>公開</th></tr></thead><tbody>';
+  var bs = b().briefings.slice().sort(function(x,y){ return String(x.startAt).localeCompare(String(y.startAt)); });
+  if (!bs.length) html += '<tr><td colspan="8" style="text-align:center;color:var(--ink-3);padding:30px">まだ日程がありません</td></tr>';
+  bs.forEach(function(x){
+    html += '<tr class="clickable" data-bf="'+h(x.id)+'"><td class="mono">'+h(x.id)+'</td>' +
+      '<td><b>'+h(x.startAt)+'</b></td><td>'+h(x.kind)+'</td>' +
+      '<td class="n">'+h(x.capacity||'—')+'</td><td class="n">'+h(x.booked||0)+'</td>' +
+      '<td class="mono">'+h(x.url||'—')+'</td><td class="tiny">'+h(x.note||'')+'</td>' +
+      '<td>'+(x.open?'<span class="tag ok">公開</span>':'<span class="tag line">非公開</span>')+'</td></tr>';
+  });
+  $('view').innerHTML = html + '</tbody></table></div>';
+  $('btnNewBf').onclick=function(){ openBfForm(null); };
+  Array.prototype.forEach.call($('view').querySelectorAll('[data-bf]'), function(tr){
+    tr.onclick=function(){ openBfForm(tr.getAttribute('data-bf')); };
+  });
+}
+function openBfForm(id){
+  var x=null; b().briefings.forEach(function(y){ if (y.id===id) x=y; });
+  state.draft = x ? JSON.parse(JSON.stringify(x)) : { id:'', startAt:'', kind:'代理店向け説明会', capacity:'', url:'', note:'', open:true };
+  $('sheetTitle').textContent = x ? '日程を編集' : '日程を追加';
+  var d=state.draft;
+  $('sheetBody').innerHTML =
+    inp('startAt','開催日時（必須）',d.startAt,'例：2026/09/03 15:00') +
+    sel('kind','対象',[['代理店向け説明会','代理店向け説明会'],['AI活用研修 説明会','AI活用研修 説明会'],['AIバード 説明会','AIバード 説明会']],d.kind) +
+    inp('capacity','定員',d.capacity,'空欄なら制限なし') +
+    inp('url','参加URL（Zoom等）',d.url) +
+    area('note','備考（代理店にも表示）',d.note) +
+    sel('open','公開',[['1','公開する'],['0','非公開']], d.open?'1':'0');
+  $('sheetFoot').innerHTML='<button class="btn plain" type="button" id="btnCancel">閉じる</button><button class="btn" type="button" id="btnSave">保存</button>';
+  $('btnCancel').onclick=function(){ openSheet(false); };
+  $('btnSave').onclick=function(){
+    ['startAt','kind','capacity','url','note'].forEach(function(k){ var el=$('f_'+k); if (el) state.draft[k]=el.value; });
+    state.draft.open = $('f_open').value==='1';
+    if (!String(state.draft.startAt).trim()){ toast('開催日時を入力してください',true); return; }
+    call('apiAdminSaveBriefing',[TOKEN,state.draft],function(){ openSheet(false); toast('保存しました'); },'保存しています');
+  };
+  openSheet(true);
+}
+
+/* ---------------- templates ---------------- */
+function renderTemplates(){
+  var html = '<div class="filters"><button class="btn sm" type="button" id="btnNewTp">＋ テンプレートを追加</button>' +
+    '<span class="tiny" style="align-self:center">代理店の「紹介文をつくる」で使われる文面です。{相手}{自分}{会社}{LP}{日時} が差し込まれます。</span></div>' +
+    '<div class="scroll-x"><table class="tbl"><thead><tr><th>順</th><th>用途</th><th>チャネル</th><th>訴求軸</th><th>見出し</th><th>本文</th><th>公開</th></tr></thead><tbody>';
+  var ts = b().templates.slice().sort(function(x,y){ return (Number(x.order)||999)-(Number(y.order)||999); });
+  if (!ts.length) html += '<tr><td colspan="7" style="text-align:center;color:var(--ink-3);padding:30px">テンプレートがありません</td></tr>';
+  ts.forEach(function(t){
+    html += '<tr class="clickable" data-tp="'+h(t.id)+'"><td class="n">'+h(t.order)+'</td><td>'+h(t.target)+'</td><td>'+h(t.channel)+'</td>' +
+      '<td>'+h(t.angle)+'</td><td><b>'+h(t.title)+'</b></td>' +
+      '<td class="tiny" style="max-width:420px;white-space:pre-wrap">'+h(String(t.body).slice(0,110))+(String(t.body).length>110?'…':'')+'</td>' +
+      '<td>'+(t.open?'<span class="tag ok">公開</span>':'<span class="tag line">非公開</span>')+'</td></tr>';
+  });
+  $('view').innerHTML = html + '</tbody></table></div>' +
+    '<p class="tiny" style="margin-top:10px">AIによる文体書き換えは、設定シートの「文面AIリライト」を ON にし、Claude APIキーを入れると有効になります。現在：' +
+    (b().settings.aiRewrite ? '<b>ON</b>' : 'OFF（テンプレート＋文体の簡易調整で動作中）') + '</p>';
+  $('btnNewTp').onclick=function(){ openTpForm(null); };
+  Array.prototype.forEach.call($('view').querySelectorAll('[data-tp]'), function(tr){
+    tr.onclick=function(){ openTpForm(tr.getAttribute('data-tp')); };
+  });
+}
+function openTpForm(id){
+  var t=null; b().templates.forEach(function(x){ if (x.id===id) t=x; });
+  state.draft = t ? JSON.parse(JSON.stringify(t)) : { id:'', order:'10', target:'お客様', channel:'LINE', angle:'', title:'', body:'', open:true };
+  $('sheetTitle').textContent = t ? 'テンプレートを編集' : 'テンプレートを追加';
+  var d=state.draft;
+  $('sheetBody').innerHTML =
+    sel('target','用途',[['お客様','お客様'],['代理店候補','代理店候補']],d.target) +
+    sel('channel','チャネル',[['LINE','LINE'],['メール','メール']],d.channel) +
+    inp('angle','訴求軸',d.angle,'例：現場の困りごとから') +
+    inp('title','見出し（管理用）',d.title) +
+    area('body','本文',d.body) +
+    '<div class="tiny" style="margin:-8px 0 14px">差し込み変数：' +
+      (opts().variables||[]).map(function(v){ return h(v.key)+'＝'+h(v.label); }).join('　/　') + '</div>' +
+    inp('order','表示順',d.order) +
+    sel('open','公開',[['1','公開する'],['0','非公開']], d.open?'1':'0');
+  $('sheetFoot').innerHTML='<button class="btn plain" type="button" id="btnCancel">閉じる</button><button class="btn" type="button" id="btnSave">保存</button>';
+  $('btnCancel').onclick=function(){ openSheet(false); };
+  $('btnSave').onclick=function(){
+    ['target','channel','angle','title','body','order'].forEach(function(k){ var el=$('f_'+k); if (el) state.draft[k]=el.value; });
+    state.draft.open = $('f_open').value==='1';
+    if (!String(state.draft.title).trim() || !String(state.draft.body).trim()){ toast('見出しと本文を入力してください',true); return; }
+    call('apiAdminSaveTemplate',[TOKEN,state.draft],function(){ openSheet(false); toast('保存しました'); },'保存しています');
+  };
+  openSheet(true);
+}
+
+/* ---------------- boot ---------------- */
+Array.prototype.forEach.call($('tabs').children, function(x){
+  x.onclick=function(){ state.tab=x.getAttribute('data-t'); window.scrollTo(0,0); render(); };
+});
+$('mask').onclick=function(){ openSheet(false); };
+$('sheetClose').onclick=function(){ openSheet(false); };
+$('btnRefresh').onclick=function(){ call('apiAdminRefresh',[TOKEN],function(){ toast('最新の状態にしました'); },'読み込んでいます'); };
+render();
+</script>
+</body>
+</html>

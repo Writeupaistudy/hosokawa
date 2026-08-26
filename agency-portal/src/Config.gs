@@ -11,6 +11,8 @@ const SHEETS = {
   AGENCY: '代理店マスタ',
   REFERRAL: '紹介',
   NOTICE: 'お知らせ・LP',
+  BRIEFING: '説明会日程',
+  TEMPLATE: '文面テンプレート',
   LOG: '変更履歴',
   DASHBOARD: 'ダッシュボード',
   SETTING: '設定'
@@ -33,6 +35,7 @@ const AGENCY_FIELDS = [
   { k: 'phone',     h: '電話番号',          w: 130 },
   { k: 'lpUrl',     h: '専用LP_URL',        w: 320 },
   { k: 'lpNote',    h: 'LPメモ',            w: 200 },
+  { k: 'rate',      h: '基本マージン率(%)', w: 130 },
   { k: 'active',    h: '状態',              w: 80  },
   { k: 'createdAt', h: '登録日',            w: 100 },
   { k: 'memo',      h: '備考',              w: 240 },
@@ -54,6 +57,13 @@ const REFERRAL_FIELDS = [
   { k: 'product',    h: '興味商材',        w: 120 },
   { k: 'status',     h: 'ステータス',      w: 120 },
   { k: 'lostReason', h: '失注理由',        w: 160 },
+  { k: 'ownership',  h: '管理方式',        w: 110 },
+  { k: 'rateSelf',   h: '紹介元マージン(%)', w: 130 },
+  { k: 'rateTarget', h: '候補マージン(%)',   w: 130 },
+  { k: 'partnerLp',  h: '候補用LP_URL',     w: 320 },
+  { k: 'briefing',   h: '説明会ステータス',  w: 130 },
+  { k: 'briefingId', h: '希望日程ID',       w: 110 },
+  { k: 'briefingAt', h: '説明会日時',       w: 150 },
   { k: 'nextAction', h: '次回アクション日', w: 120 },
   { k: 'memo',       h: '弊社メモ',        w: 300 },
   { k: 'updatedBy',  h: '最終更新者',      w: 160 },
@@ -71,6 +81,28 @@ const NOTICE_FIELDS = [
   { k: 'target',    h: '対象',         w: 160 },
   { k: 'published', h: '掲載',         w: 70  },
   { k: 'updatedAt', h: '更新日時',     w: 140 }
+];
+
+const BRIEFING_FIELDS = [
+  { k: 'id',       h: 'ID',        w: 90  },
+  { k: 'startAt',  h: '開催日時',   w: 160 },
+  { k: 'kind',     h: '対象',      w: 160 },
+  { k: 'capacity', h: '定員',      w: 70  },
+  { k: 'url',      h: '参加URL',   w: 300 },
+  { k: 'note',     h: '備考',      w: 260 },
+  { k: 'open',     h: '公開',      w: 70  },
+  { k: 'booked',   h: '申込数',    w: 80, formula: true }
+];
+
+const TEMPLATE_FIELDS = [
+  { k: 'id',      h: 'ID',       w: 90  },
+  { k: 'order',   h: '表示順',   w: 70  },
+  { k: 'target',  h: '用途',     w: 130 },
+  { k: 'channel', h: 'チャネル', w: 100 },
+  { k: 'angle',   h: '訴求軸',   w: 150 },
+  { k: 'title',   h: '見出し',   w: 220 },
+  { k: 'body',    h: '本文',     w: 560 },
+  { k: 'open',    h: '公開',     w: 70  }
 ];
 
 const LOG_FIELDS = [
@@ -92,6 +124,14 @@ const REQUIRED_LABELS = { company: '会社名', name: '氏名', email: 'メー�
 const KIND_CUSTOMER = '顧客紹介';
 const KIND_PARTNER  = '代理店紹介';
 
+/** 代理店候補の管理方式 */
+const OWNERSHIP_TOSS = 'トスアップ';   // 弊社がすべて対応する。紹介元には固定％
+const OWNERSHIP_SELF = '自己管理';     // 代理店が自分で候補を管理し、自分の取り分を分け合う
+const OWNERSHIPS = [OWNERSHIP_TOSS, OWNERSHIP_SELF];
+
+/** 説明会のステータス */
+const BRIEFING_STATES = ['未案内', '案内済', '日程調整中', '予約確定', '参加済', '不参加'];
+
 /**
  * 設定シートの初期値。行の順番＝設定シートの行順です。
  * B3（ウェブアプリURL）には名前付き範囲 WEBAPP_URL が付きます。
@@ -104,10 +144,17 @@ const DEFAULT_SETTINGS = [
   { key: '通知先メールアドレス',   value: '',      note: '新規紹介が登録されたときの通知先。カンマ区切りで複数可' },
   { key: '新規登録メール通知',     value: 'ON',    note: 'ON / OFF' },
   { key: '代理店によるステータス編集', value: '許可', note: '許可 / 不可。「不可」にすると代理店は閲覧のみになります' },
+  { key: 'UIバージョン',           value: 'v2',    note: 'v2（現行デザイン）/ v1（初期デザイン）。URLに &ui=v1 を付けても切り替えられます' },
+  { key: '紹介の目標件数',         value: '10',    note: 'マイページに「あと◯社」と表示する目標。達成すると次の目標が出ます' },
+  { key: 'トスアップ時の紹介元マージン(%)', value: '3', note: '代理店候補を弊社にトスアップしたときに、紹介元の代理店へ入る％（例：20%のうち3%）' },
+  { key: '個別日程調整URL',        value: '',      note: 'TimeRex等の予約ページURL。説明会の日程が合わない相手に、この予約URLを案内します' },
   { key: 'ステータス選択肢',       value: '新規,アプローチ中,商談中,稼働中,保留,失注,取り下げ', note: 'カンマ区切り。ここを編集するとアプリの選択肢が即時に変わります' },
   { key: '失注理由選択肢',         value: 'ニーズなし,代理店化を辞退,音信不通,予算が合わない,競合他社に決定,時期尚早,その他', note: 'カンマ区切り' },
   { key: '興味商材選択肢',         value: 'AIバード,AI活用研修,両方,未定', note: 'カンマ区切り（顧客紹介のときだけ使います）' },
-  { key: '代理店ページの案内文',   value: 'ご紹介いただける方の情報をこちらに登録してください。LINEに流れず、進捗もこの画面で確認できます。', note: 'マイページ上部に表示される説明文' }
+  { key: '代理店ページの案内文',   value: 'ご紹介いただける方の情報をこちらに登録してください。LINEに流れず、進捗もこの画面で確認できます。', note: 'マイページ上部に表示される説明文' },
+  { key: '文面AIリライト',         value: 'OFF',   note: 'ON にすると「紹介文をつくる」でClaude APIを使い、代理店の文体に合わせて書き換えます。OFFでも文体を真似た書き換えは動きます（AIなし）' },
+  { key: 'Claude APIキー',         value: '',      note: 'console.anthropic.com で発行したキー。文面AIリライトを ON にする場合のみ必要' },
+  { key: 'Claudeモデル',           value: 'claude-opus-5', note: '通常はこのままでOK。安く抑えたい場合は claude-sonnet-5 や claude-haiku-4-5' }
 ];
 
 /** 代理店マスタの「マイページURL」列が参照する名前付き範囲（＝設定シートのウェブアプリURLのセル） */
@@ -145,6 +192,22 @@ function writableWidth_(fields) {
 function fieldIndex_(fields, key) {
   for (var i = 0; i < fields.length; i++) if (fields[i].k === key) return i;
   return -1;
+}
+
+/** 列番号(1始まり) → A1記法の列文字。列を増やしても数式が壊れないようにするために使う。 */
+function colLetter_(n) {
+  var s = '';
+  while (n > 0) {
+    var m = (n - 1) % 26;
+    s = String.fromCharCode(65 + m) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
+}
+
+/** フィールドキー → A1記法の列文字 */
+function colOf_(fields, key) {
+  return colLetter_(fieldIndex_(fields, key) + 1);
 }
 
 function statusColor_(status) {

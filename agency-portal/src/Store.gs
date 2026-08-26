@@ -7,8 +7,21 @@
  *    もし誰かが 紹介 シートの行を消しても、履歴からいつでも復元できます。
  */
 
+/**
+ * 操作対象のスプレッドシート。
+ * 通常はこのスクリプトが紐づいているスプレッドシート。
+ * スクリプトプロパティ TARGET_SPREADSHEET_ID が設定されていれば、そちらを開く。
+ * （@gmail.com のアカウントでデプロイしつつ、書き込み先は弊社ドメインのスプレッドシート、という構成のため）
+ */
 function ss_() {
-  return SpreadsheetApp.getActiveSpreadsheet();
+  var id = null;
+  try { id = PropertiesService.getScriptProperties().getProperty('TARGET_SPREADSHEET_ID'); } catch (e) {}
+  if (id) return SpreadsheetApp.openById(id);
+  var active = SpreadsheetApp.getActiveSpreadsheet();
+  if (!active) {
+    throw new Error('操作対象のスプレッドシートが決まっていません。エディタで setTargetSpreadsheetId("スプレッドシートID") を一度実行してください。');
+  }
+  return active;
 }
 
 function sheet_(name) {
@@ -158,6 +171,16 @@ function nextAgencyId_() {
   return 'AG-' + ('000' + (max + 1)).slice(-3);
 }
 
+/** 「20」「20%」「２０」などを数値に寄せる。空なら fallback。 */
+function normalizeRate_(value, fallback) {
+  if (value === undefined || value === null || String(value).trim() === '') {
+    return fallback === undefined ? '' : fallback;
+  }
+  var n = parseFloat(String(value).replace(/[^0-9.]/g, ''));
+  if (isNaN(n)) return fallback === undefined ? '' : fallback;
+  return Math.round(n * 100) / 100;
+}
+
 function newToken_() {
   return Utilities.getUuid().replace(/-/g, '').substring(0, 24);
 }
@@ -174,6 +197,7 @@ function createAgency_(payload) {
     phone: String(payload.phone || '').trim(),
     lpUrl: String(payload.lpUrl || '').trim(),
     lpNote: String(payload.lpNote || '').trim(),
+    rate: normalizeRate_(payload.rate, 20),
     active: payload.active === '停止' ? '停止' : '有効',
     createdAt: Utilities.formatDate(now, 'Asia/Tokyo', 'yyyy/MM/dd'),
     memo: String(payload.memo || '').trim()
@@ -195,6 +219,7 @@ function updateAgency_(payload) {
     phone: String(payload.phone !== undefined ? payload.phone : current.phone).trim(),
     lpUrl: String(payload.lpUrl !== undefined ? payload.lpUrl : current.lpUrl).trim(),
     lpNote: String(payload.lpNote !== undefined ? payload.lpNote : current.lpNote).trim(),
+    rate: normalizeRate_(payload.rate !== undefined ? payload.rate : current.rate, 20),
     active: payload.active === '停止' ? '停止' : '有効',
     createdAt: current.createdAt,
     memo: String(payload.memo !== undefined ? payload.memo : current.memo).trim()
@@ -287,11 +312,19 @@ function createReferral_(agency, payload, actor) {
     product: kind === KIND_CUSTOMER ? String(payload.product || '').trim() : '',
     status: statuses.indexOf(payload.status) >= 0 ? payload.status : statuses[0],
     lostReason: '',
+    ownership: '',
+    rateSelf: '',
+    rateTarget: '',
+    partnerLp: '',
+    briefing: BRIEFING_STATES[0],
+    briefingId: '',
+    briefingAt: '',
     nextAction: '',
     memo: '',
     updatedBy: actor
   };
   if (!rec.name) throw new Error('氏名は必須です。');
+  applyPartnerTerms_(rec, payload, agency, settings);
 
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
@@ -336,6 +369,10 @@ function updateReferral_(referralId, payload, allowedKeys, actor) {
     if (next.kind !== KIND_CUSTOMER) next.product = '';
     // 失注以外になったら失注理由はクリア
     if (next.status !== '失注') next.lostReason = '';
+    // 代理店候補の条件（管理方式・マージン・候補用LP）を整える
+    applyPartnerTerms_(next, next, findAgencyById_(next.agencyId), getSettings_());
+    // 説明会の日程が選ばれていれば日時を埋める
+    syncBriefingTime_(next);
 
     if (Object.keys(changes).length === 0) return current;
 
@@ -350,6 +387,144 @@ function updateReferral_(referralId, payload, allowedKeys, actor) {
   }
 }
 
+/**
+ * 代理店候補（代理店紹介）の取り分まわりを整える。
+ *
+ *   トスアップ … 弊社がすべて対応する。紹介元には設定の固定％が入る。
+ *   自己管理   … 代理店が自分で候補を管理し、自分の基本マージン率を候補と分け合う。
+ *                （例：基本20% → 候補15% / 自分5%）
+ */
+function applyPartnerTerms_(rec, payload, agency, settings) {
+  if (rec.kind !== KIND_PARTNER) {
+    rec.ownership = '';
+    rec.rateSelf = '';
+    rec.rateTarget = '';
+    rec.partnerLp = '';
+    return;
+  }
+  var ownership = String(payload.ownership || rec.ownership || '').trim();
+  if (OWNERSHIPS.indexOf(ownership) < 0) ownership = OWNERSHIP_TOSS;
+  rec.ownership = ownership;
+
+  var base = normalizeRate_(agency && agency.rate, 20);
+  var tossRate = normalizeRate_(settings['トスアップ時の紹介元マージン(%)'], 3);
+
+  if (ownership === OWNERSHIP_TOSS) {
+    rec.rateSelf = normalizeRate_(payload.rateSelf !== undefined && payload.rateSelf !== ''
+      ? payload.rateSelf : (rec.rateSelf !== '' && rec.rateSelf !== undefined ? rec.rateSelf : tossRate), tossRate);
+    rec.rateTarget = '';   // 候補は弊社と直接契約するので、紹介元は関与しない
+  } else {
+    rec.rateSelf = normalizeRate_(payload.rateSelf, '');
+    rec.rateTarget = normalizeRate_(payload.rateTarget, '');
+    var sum = (rec.rateSelf === '' ? 0 : rec.rateSelf) + (rec.rateTarget === '' ? 0 : rec.rateTarget);
+    if (base !== '' && sum > base + 0.001) {
+      throw new Error('取り分の合計が ' + sum + '% で、御社の基本マージン ' + base + '% を超えています。合計が ' + base + '% 以内になるように調整してください。');
+    }
+  }
+  if (payload.partnerLp !== undefined) rec.partnerLp = String(payload.partnerLp || '').trim();
+}
+
+/** 希望日程IDから説明会日時を埋める（日程が消えていたら日時はそのまま残す） */
+function syncBriefingTime_(rec) {
+  var id = String(rec.briefingId || '').trim();
+  if (!id) return;
+  var list = listBriefings_();
+  for (var i = 0; i < list.length; i++) {
+    if (String(list[i].id).trim() === id) { rec.briefingAt = list[i].startAt; return; }
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* 説明会日程                                                           */
+/* ------------------------------------------------------------------ */
+
+function listBriefings_() {
+  return readAll_(SHEETS.BRIEFING, BRIEFING_FIELDS);
+}
+
+/** 代理店に見せる日程（公開中かつ未来のもの）を開催順で返す */
+function openBriefings_() {
+  var today = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy/MM/dd');
+  return listBriefings_()
+    .filter(function (b) {
+      if (!isTrue_(b.open)) return false;
+      var d = String(b.startAt || '').slice(0, 10).replace(/-/g, '/');
+      return !d || d >= today;
+    })
+    .sort(function (a, b) { return String(a.startAt).localeCompare(String(b.startAt)); });
+}
+
+function nextBriefingId_() {
+  return 'B-' + ('00' + (maxSeq_(listBriefings_()) + 1)).slice(-3);
+}
+
+function saveBriefing_(payload) {
+  var rec = {
+    id: String(payload.id || '').trim() || nextBriefingId_(),
+    startAt: String(payload.startAt || '').trim(),
+    kind: String(payload.kind || '代理店向け説明会').trim(),
+    capacity: String(payload.capacity || '').trim(),
+    url: String(payload.url || '').trim(),
+    note: String(payload.note || '').trim(),
+    open: payload.open ? 'TRUE' : 'FALSE'
+  };
+  if (!rec.startAt) throw new Error('開催日時は必須です。');
+  var existing = null;
+  listBriefings_().forEach(function (b) { if (b.id === rec.id) existing = b; });
+  if (existing) writeRow_(SHEETS.BRIEFING, BRIEFING_FIELDS, existing._row, rec);
+  else appendRow_(SHEETS.BRIEFING, BRIEFING_FIELDS, rec);
+  return rec;
+}
+
+/* ------------------------------------------------------------------ */
+/* 文面テンプレート                                                     */
+/* ------------------------------------------------------------------ */
+
+function listTemplates_() {
+  return readAll_(SHEETS.TEMPLATE, TEMPLATE_FIELDS)
+    .filter(function (t) { return isTrue_(t.open); })
+    .sort(function (a, b) { return (Number(a.order) || 999) - (Number(b.order) || 999); });
+}
+
+function saveTemplate_(payload) {
+  var rec = {
+    id: String(payload.id || '').trim() || ('T-' + ('00' + (maxSeq_(readAll_(SHEETS.TEMPLATE, TEMPLATE_FIELDS)) + 1)).slice(-3)),
+    order: String(payload.order || '10').trim(),
+    target: String(payload.target || 'お客様').trim(),
+    channel: String(payload.channel || 'LINE').trim(),
+    angle: String(payload.angle || '').trim(),
+    title: String(payload.title || '').trim(),
+    body: String(payload.body || '').trim(),
+    open: payload.open ? 'TRUE' : 'FALSE'
+  };
+  if (!rec.title || !rec.body) throw new Error('見出しと本文は必須です。');
+  var existing = null;
+  readAll_(SHEETS.TEMPLATE, TEMPLATE_FIELDS).forEach(function (t) { if (t.id === rec.id) existing = t; });
+  if (existing) writeRow_(SHEETS.TEMPLATE, TEMPLATE_FIELDS, existing._row, rec);
+  else appendRow_(SHEETS.TEMPLATE, TEMPLATE_FIELDS, rec);
+  return rec;
+}
+
+/* ------------------------------------------------------------------ */
+/* 共通の小道具                                                         */
+/* ------------------------------------------------------------------ */
+
+/** チェックボックス列や「TRUE」「掲載」「○」を真偽値にする */
+function isTrue_(v) {
+  var s = String(v).trim().toUpperCase();
+  return s === 'TRUE' || s === '掲載' || s === '公開' || s === '○' || s === '◯' || s === 'ON' || s === '1';
+}
+
+/** ID末尾の連番の最大値 */
+function maxSeq_(rows) {
+  var max = 0;
+  for (var i = 0; i < rows.length; i++) {
+    var m = String(rows[i].id).match(/(\d+)\s*$/);
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  }
+  return max;
+}
+
 /* ------------------------------------------------------------------ */
 /* お知らせ・LP                                                         */
 /* ------------------------------------------------------------------ */
@@ -362,7 +537,7 @@ function listNotices_() {
 function noticesForAgency_(agencyId) {
   return listNotices_()
     .filter(function (n) {
-      if (String(n.published).toUpperCase() !== 'TRUE' && n.published !== '掲載' && n.published !== '○') return false;
+      if (!isTrue_(n.published)) return false;
       var t = String(n.target || '').trim();
       if (!t || t === '全体' || t === 'ALL') return true;
       return t.split(',').map(function (s) { return s.trim(); }).indexOf(String(agencyId).trim()) >= 0;
@@ -371,13 +546,7 @@ function noticesForAgency_(agencyId) {
 }
 
 function nextNoticeId_() {
-  var all = listNotices_();
-  var max = 0;
-  for (var i = 0; i < all.length; i++) {
-    var m = String(all[i].id).match(/(\d+)\s*$/);
-    if (m) max = Math.max(max, parseInt(m[1], 10));
-  }
-  return 'N-' + ('00' + (max + 1)).slice(-3);
+  return 'N-' + ('00' + (maxSeq_(listNotices_()) + 1)).slice(-3);
 }
 
 function saveNotice_(payload) {

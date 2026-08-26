@@ -2,7 +2,7 @@ require('./gas-mock.cjs');
 const fs = require('fs');
 // GAS は全 .gs ファイルを1つのグローバルスコープに読み込む。それを再現するため連結して1回で評価する。
 const dir = require('path').join(__dirname, '..', 'src');
-const src = ['Config','Store','Setup','Code'].map(f => fs.readFileSync(dir + '/' + f + '.gs', 'utf8')).join('\n')
+const src = ['Config','Store','Setup','Code','Copy'].map(f => fs.readFileSync(dir + '/' + f + '.gs', 'utf8')).join('\n')
   // トップレベルの const は eval では共有されないので、テストから見えるよう global に載せ替える
   .replace(/^const (\w+) =/gm, 'globalThis.$1 =');
 (0, eval)(src);
@@ -158,6 +158,139 @@ const ab2 = adminBoard_(adminToken);
 ok(ab2.options.statuses.length === 7 && ab2.options.kinds.length === 2, '選択肢が設定シートから供給される');
 ok(typeof ab2.referrals[0].memo === 'string', '管理画面には弊社メモが渡る');
 ok(jsonForHtml_({ x: '</script><script>alert(1)</script>' }).indexOf('</script>') < 0, 'HTML埋め込み用JSONで < がエスケープされる');
+
+
+head('16. 代理店候補の取り分（トスアップ / 自己管理）');
+// セクション12でトークンを再発行しているので、以降は都度取り直す
+const tok = () => findAgencyById_(a1.id).token;
+const ag = findAgencyById_(a1.id);
+updateAgency_({ id: ag.id, name: ag.name, rate: 20 });
+const p1 = createReferral_(findAgencyById_(a1.id), { kind:'代理店紹介', name:'トス 太郎' }, 'アルファ株式会社');
+ok(findReferralById_(p1.id).ownership === 'トスアップ', '代理店紹介の既定はトスアップ');
+ok(Number(findReferralById_(p1.id).rateSelf) === 3, 'トスアップなら設定の3%が入る', findReferralById_(p1.id).rateSelf);
+ok(findReferralById_(p1.id).rateTarget === '', 'トスアップでは候補の取り分を持たない');
+
+apiAgencyUpdateReferral(tok(), p1.id, { ownership:'自己管理', rateTarget:'15', rateSelf:'5' });
+const p1b = findReferralById_(p1.id);
+ok(p1b.ownership === '自己管理' && Number(p1b.rateTarget) === 15 && Number(p1b.rateSelf) === 5,
+   '自己管理なら候補15% / 自分5% に分けられる', [p1b.rateTarget, p1b.rateSelf]);
+
+let over = '';
+try { apiAgencyUpdateReferral(tok(), p1.id, { ownership:'自己管理', rateTarget:'18', rateSelf:'5' }); }
+catch(e){ over = e.message; }
+ok(over.indexOf('20%') >= 0, '基本20%を超える配分は弾かれる', over);
+ok(Number(findReferralById_(p1.id).rateTarget) === 15, '弾かれたときは元の値のまま');
+
+updateAgency_({ id: ag.id, name: ag.name, rate: 10 });
+let over10 = false;
+try { apiAgencyUpdateReferral(tok(), p1.id, { ownership:'自己管理', rateTarget:'8', rateSelf:'5' }); } catch(e){ over10 = true; }
+ok(over10, '基本10%の代理店なら13%配分は弾かれる');
+apiAgencyUpdateReferral(tok(), p1.id, { ownership:'自己管理', rateTarget:'7', rateSelf:'3' });
+ok(Number(findReferralById_(p1.id).rateTarget) === 7, '10%以内なら通る');
+
+apiAgencyUpdateReferral(tok(), p1.id, { kind:'顧客紹介' });
+ok(findReferralById_(p1.id).ownership === '' && findReferralById_(p1.id).rateSelf === '',
+   '顧客紹介に変えたら取り分は消える');
+apiAgencyUpdateReferral(tok(), p1.id, { kind:'代理店紹介' });
+
+head('17. 代理店候補ごとのLP');
+apiAdminUpdateReferral(adminToken, p1.id, { partnerLp:'https://example.com/lp?ref=AG-001-P1' });
+ok(findReferralById_(p1.id).partnerLp.indexOf('AG-001-P1') > 0, '弊社が候補用LPを発行できる');
+const shown = agencyBoard_(findAgencyById_(a1.id)).referrals.filter(r => r.id === p1.id)[0];
+ok(shown.partnerLp.indexOf('AG-001-P1') > 0, '代理店のマイページに候補用LPが渡る');
+apiAgencyUpdateReferral(tok(), p1.id, { partnerLp:'https://evil.example/横取り' });
+ok(findReferralById_(p1.id).partnerLp.indexOf('AG-001-P1') > 0, '代理店は候補用LPを書き換えられない');
+
+head('18. 説明会');
+const bf1 = saveBriefing_({ startAt:'2099/09/03 15:00', kind:'代理店向け説明会', capacity:'10', open:true });
+saveBriefing_({ startAt:'2099/09/10 15:00', kind:'代理店向け説明会', open:false });
+saveBriefing_({ startAt:'2000/01/01 10:00', kind:'代理店向け説明会', open:true });
+ok(listBriefings_().length === 3, '日程を3件登録できる');
+ok(openBriefings_().length === 1, '公開中かつ未来の日程だけが代理店に見える', openBriefings_().map(x=>x.startAt));
+apiAgencyUpdateReferral(tok(), p1.id, { briefing:'案内済', briefingId: bf1.id });
+const p1c = findReferralById_(p1.id);
+ok(p1c.briefing === '案内済' && p1c.briefingId === bf1.id, '代理店が説明会の案内を記録できる');
+ok(p1c.briefingAt === '2099/09/03 15:00', '日程IDから日時が自動で入る', p1c.briefingAt);
+ok(agencyBoard_(findAgencyById_(a1.id)).briefings.length === 1, 'マイページに日程が渡る');
+
+head('19. 目標件数');
+setSetting_('紹介の目標件数', '10');
+ok(agencyBoard_(findAgencyById_(a1.id)).goal === 10, '目標件数が画面に渡る');
+setSetting_('紹介の目標件数', '5');
+ok(agencyBoard_(findAgencyById_(a1.id)).goal === 5, '設定を変えると即座に反映される');
+setSetting_('紹介の目標件数', '10');
+
+head('20. 紹介文をつくる');
+setSetting_('文面AIリライト', 'OFF');
+const plain = generateCopy_(findAgencyById_(a1.id),
+  { target:'お客様', channel:'LINE', values:{ '{相手}':'佐藤', '{自分}':'田中', '{会社}':'弊社', '{LP}':'https://example.com/lp' } },
+  getSettings_());
+ok(plain.items.length >= 1, 'テンプレートから文面が出る（' + plain.items.length + '案）');
+ok(plain.items[0].text.indexOf('{') < 0, '差し込み変数が残らない', plain.items[0].text.slice(0,40));
+ok(plain.items[0].text.indexOf('佐藤') >= 0 && plain.items[0].text.indexOf('https://example.com/lp') >= 0,
+   '相手の名前とURLが入る');
+ok(plain.engine === 'template', '過去文面なしならテンプレートそのまま');
+
+const casual = generateCopy_(findAgencyById_(a1.id), {
+  target:'お客様', channel:'LINE',
+  values:{ '{相手}':'佐藤', '{自分}':'田中', '{会社}':'弊社', '{LP}':'https://example.com/lp' },
+  samples:'こんにちは！僕です！\nこの前の件、めっちゃ良さそうでした！\n佐藤さん、また連絡しますね！！'
+}, getSettings_());
+ok(casual.engine === 'style', '過去文面があれば文体調整が走る');
+ok(casual.items[0].text.indexOf('こんにちは') === 0, 'あいさつがその人のものに置き換わる', casual.items[0].text.slice(0,20));
+ok(casual.items[0].text.indexOf('僕') >= 0 || casual.items[0].text.indexOf('私') < 0, '一人称が写る');
+
+const formal = generateCopy_(findAgencyById_(a1.id), {
+  target:'代理店候補', channel:'メール',
+  values:{ '{相手}':'鈴木', '{自分}':'田中', '{会社}':'弊社', '{LP}':'https://example.com/lp' },
+  samples:'いつもお世話になっております。\n株式会社◯◯の田中でございます。\n何卒よろしくお願い申し上げます。'
+}, getSettings_());
+ok(formal.items.length >= 1, '代理店候補向け・メールの文面も出る');
+ok(formal.items[0].text.indexOf('様') >= 0, '敬称の手がかりがない文体では、テンプレートの「様」を崩さない');
+
+const sanUser = generateCopy_(findAgencyById_(a1.id), {
+  target:'代理店候補', channel:'メール',
+  values:{ '{相手}':'鈴木', '{自分}':'田中', '{会社}':'弊社', '{LP}':'https://example.com/lp' },
+  samples:'鈴木さん、お疲れさまです。田中です。\n先日はありがとうございました。またご連絡しますね。'
+}, getSettings_());
+ok(sanUser.items[0].text.indexOf('鈴木さん') >= 0 && sanUser.items[0].text.indexOf('鈴木様') < 0,
+   '「さん」で呼ぶ人には「さん」に揃う', sanUser.items[0].text.slice(0,16));
+
+let noTpl = false;
+try { generateCopy_(findAgencyById_(a1.id), { target:'お客様', channel:'FAX' }, getSettings_()); } catch(e){ noTpl = true; }
+ok(!noTpl, '未知のチャネルはLINEに丸められて落ちない');
+
+head('21. 文面テンプレート');
+ok(listTemplates_().length === DEFAULT_TEMPLATES.length, '初期テンプレートが入っている（' + listTemplates_().length + '件）');
+saveTemplate_({ target:'お客様', channel:'LINE', angle:'テスト', title:'テスト見出し', body:'{相手}さんへ', open:true });
+ok(listTemplates_().filter(t => t.title === 'テスト見出し').length === 1, 'テンプレートを追加できる');
+const t0 = listTemplates_()[0];
+saveTemplate_({ id: t0.id, target:t0.target, channel:t0.channel, angle:t0.angle, title:'書き換え後', body:t0.body, open:true });
+ok(listTemplates_().filter(t => t.id === t0.id)[0].title === '書き換え後', '既存テンプレートを上書きできる');
+seedTemplates_();
+ok(listTemplates_().filter(t => t.title === '書き換え後').length === 1, '2回目のセットアップで初期値に戻されない');
+
+head('22. UIバージョンの切り替え');
+ok(uiVersion_(null, getSettings_()) === 'v2', '既定はv2');
+ok(uiVersion_('v1', getSettings_()) === 'v1', 'URLの ui=v1 で旧デザインに戻せる');
+setSetting_('UIバージョン', 'v1');
+ok(uiVersion_(null, getSettings_()) === 'v1', '設定シートでも切り替えられる');
+setSetting_('UIバージョン', 'v2');
+
+head('23. 列を増やしても既存データがズレない');
+{
+  const sh = sheet_(SHEETS.REFERRAL);
+  const before = findReferralById_(r3.id);
+  // 「情報の充足」が末尾（数式列）のままであること
+  const headers = sh.getRange(1, 1, 1, REFERRAL_FIELDS.length).getDisplayValues()[0];
+  ok(headers[headers.length - 1] === '情報の充足', '数式列は必ず末尾', headers[headers.length - 1]);
+  ok(writableWidth_(REFERRAL_FIELDS) === REFERRAL_FIELDS.length - 1, 'スクリプトは数式列に書かない');
+  setupSpreadsheet();
+  const after = findReferralById_(r3.id);
+  ok(after.name === before.name && after.email === before.email && after.status === before.status,
+     '再セットアップしても既存の紹介データは変わらない');
+  ok(findAgencyById_(a1.id).rate !== '', '代理店の基本マージン率も保たれる');
+}
 
 console.log('\n────────────────────────');
 console.log(pass + ' passed, ' + fail + ' failed');

@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <base target="_top">
+  <?!= include('StyleV2'); ?>
+</head>
+<body>
+
+<div class="hd">
+  <div class="wrap hd-row">
+    <div>
+      <div class="co" id="hdCo"></div>
+      <h1 id="hdName"></h1>
+      <div class="rule"></div>
+    </div>
+    <button class="ghost-btn" id="btnRefresh" type="button">更新</button>
+  </div>
+</div>
+
+<div class="wrap" id="view"></div>
+
+<button class="fab" id="fab" type="button">＋ 紹介</button>
+
+<nav class="nav" id="nav"></nav>
+
+<div class="mask" id="mask"></div>
+<div class="sheet" id="sheet">
+  <div class="sheet-hd"><h2 id="sheetTitle"></h2><button class="x" id="sheetClose" type="button">×</button></div>
+  <div class="sheet-bd" id="sheetBody"></div>
+  <div class="sheet-ft" id="sheetFoot"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="veil" id="veil"><div class="spin"></div><div class="msg" id="veilMsg"></div></div>
+
+<script>
+var BOOT = <?!= boot ?>;
+var TOKEN = BOOT.agency.token;
+
+var state = {
+  board: BOOT,
+  tab: 'home',
+  kind: 'all',
+  status: 'all',
+  editing: null,
+  draft: {},
+  copy: { target: 'お客様', channel: 'LINE', values: {}, samples: '', result: null }
+};
+
+/* ================= utilities ================= */
+function $(id){ return document.getElementById(id); }
+function h(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function veil(on, msg){ $('veilMsg').textContent = msg || ''; $('veil').classList.toggle('on', !!on); }
+var toastTimer = null;
+function toast(msg, isErr){
+  var t = $('toast');
+  t.textContent = msg; t.classList.toggle('err', !!isErr); t.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function(){ t.classList.remove('on'); }, isErr ? 4200 : 2600);
+}
+function opts(){ return state.board.options; }
+function b(){ return state.board; }
+function isPartner(r){ return r.kind === opts().kinds[1]; }
+
+function missingOf(r){
+  var o = opts(), out = [];
+  for (var i = 0; i < o.requiredKeys.length; i++){
+    var k = o.requiredKeys[i];
+    if (!String(r[k] || '').trim()) out.push(o.requiredLabels[k] || k);
+  }
+  return out;
+}
+function statusStyle(s){
+  var c = (opts().statusColors || {})[s] || { bg:'#f1efe9', fg:'#6e685e' };
+  return 'background:' + c.bg + ';color:' + c.fg;
+}
+function call(fn, args, onDone, waitMsg){
+  veil(true, waitMsg);
+  var r = google.script.run
+    .withSuccessHandler(function(res){ veil(false); state.board = res; render(); if (onDone) onDone(res); })
+    .withFailureHandler(function(err){ veil(false); toast((err && err.message) ? err.message : '通信に失敗しました', true); });
+  r[fn].apply(r, args);
+}
+function copyText(text){
+  var done = function(){ toast('コピーしました'); };
+  if (navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(done, fb); }
+  else fb();
+  function fb(){
+    var ta = document.createElement('textarea');
+    ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); done(); } catch(e){ toast('コピーできませんでした', true); }
+    document.body.removeChild(ta);
+  }
+}
+function share(text){
+  if (navigator.share){ navigator.share({ text: text }).catch(function(){}); }
+  else copyText(text);
+}
+function openSheet(on){
+  $('mask').classList.toggle('on', on);
+  $('sheet').classList.toggle('on', on);
+  document.body.style.overflow = on ? 'hidden' : '';
+}
+
+/* ================= nav ================= */
+var TABS = [
+  { k:'home',  l:'ホーム', d:'M3 10.5 12 3l9 7.5M5.5 9.5V20h13V9.5' },
+  { k:'list',  l:'ご紹介', d:'M4 6h16M4 12h16M4 18h10' },
+  { k:'copy',  l:'紹介文', d:'M5 3.5h9l5 5V20.5H5zM14 3.5v5h5M8.5 13h7M8.5 16.5h4.5' },
+  { k:'meet',  l:'説明会', d:'M4 6h16v14H4zM4 10h16M9 3v4M15 3v4' }
+];
+function renderNav(){
+  $('nav').innerHTML = TABS.map(function(t){
+    return '<button type="button" data-t="' + t.k + '" class="' + (state.tab === t.k ? 'on' : '') + '">' +
+      '<svg class="ic" viewBox="0 0 24 24"><path d="' + t.d + '"/></svg>' +
+      '<span class="lb">' + t.l + '</span></button>';
+  }).join('');
+  Array.prototype.forEach.call($('nav').children, function(btn){
+    btn.onclick = function(){ state.tab = btn.getAttribute('data-t'); window.scrollTo(0,0); render(); };
+  });
+  $('fab').style.display = (state.tab === 'home' || state.tab === 'list') ? '' : 'none';
+}
+
+/* ================= render ================= */
+function render(){
+  $('hdCo').textContent = b().company + ' 代理店ポータル';
+  $('hdName').textContent = b().agency.name + ' 様';
+  renderNav();
+  if (state.tab === 'home') renderHome();
+  else if (state.tab === 'list') renderList();
+  else if (state.tab === 'copy') renderCopy();
+  else renderMeet();
+}
+
+/* ---------------- home ---------------- */
+function renderHome(){
+  var rs = b().referrals;
+  var n = function(f){ var c=0; for (var i=0;i<rs.length;i++) if (f(rs[i])) c++; return c; };
+  var total = rs.length;
+  var goal = b().goal;
+  var reached = Math.floor(total / goal);
+  var target = (reached + (total % goal === 0 && total > 0 ? 0 : 1)) * goal;
+  if (total === 0) target = goal;
+  var remain = Math.max(target - total, 0);
+  var pct = Math.min(Math.round((total - (target - goal)) / goal * 100), 100);
+
+  var html = '';
+
+  // 目標
+  if (remain === 0){
+    html += '<div class="sec"><div class="goal done">' +
+      '<div class="lead mincho">' + target + '社ご紹介、達成です。</div>' +
+      '<div class="big mincho">いつもありがとうございます。次は<b>' + (target + goal) + '</b>社を目指しましょう。</div>' +
+      '<div class="bar"><i style="width:100%"></i></div>' +
+      '<div class="ticks"><span>0</span><span>' + target + '社 達成</span></div>' +
+      '</div></div>';
+  } else {
+    html += '<div class="sec"><div class="goal">' +
+      '<div class="lead mincho">まずは' + target + '社のご紹介を目指しましょう。</div>' +
+      '<div class="big mincho">達成まで、あと<b>' + remain + '</b>社です。</div>' +
+      '<div class="bar"><i style="width:' + Math.max(pct, 3) + '%"></i></div>' +
+      '<div class="ticks"><span>' + (target - goal) + '社</span><span>' + total + '社 ご紹介済み</span><span>' + target + '社</span></div>' +
+      '</div></div>';
+  }
+
+  // 数字
+  html += '<div class="sec"><div class="stats">' +
+    tile(total, '合計', '') +
+    tile(n(function(r){ return r.status === '新規' || r.status === 'アプローチ中' || r.status === '商談中'; }), '進行中', 'wa') +
+    tile(n(function(r){ return r.status === '稼働中'; }), '稼働中', 'ok') +
+    tile(n(function(r){ return r.status === '失注'; }), '失注', 'ng') +
+    '</div></div>';
+
+  // 要追記
+  var lack = rs.filter(function(r){ return missingOf(r).length > 0; });
+  if (lack.length){
+    html += '<div class="sec"><div class="flag"><div class="t">弊社へ伝わっていない情報が ' + lack.length + '件 あります。<br>' +
+      '追記いただけると、こちらから動けます。</div>' +
+      '<button type="button" id="btnLack">確認する</button></div></div>';
+  }
+
+  // 専用LP
+  var a = b().agency;
+  html += '<div class="sec"><div class="sec-hd"><h2>御社専用 AI活用研修 説明LP</h2></div><div class="panel pad">';
+  if (a.lpUrl){
+    html += '<div class="muted">このURLからのお申込みは、御社からのご紹介として記録されます。</div>' +
+      '<code class="url" style="margin-top:10px">' + h(a.lpUrl) + '</code>' +
+      (a.lpNote ? '<div class="tiny" style="margin-top:7px">' + h(a.lpNote) + '</div>' : '') +
+      '<div class="btns"><button class="btn line" type="button" data-copy="' + h(a.lpUrl) + '">URLをコピー</button>' +
+      '<a class="btn" href="' + h(a.lpUrl) + '" target="_blank" rel="noopener">LPを開く</a></div>';
+  } else {
+    html += '<div class="muted">御社専用LPは只今準備中です。公開次第、この場所に表示されます。</div>';
+  }
+  html += '</div></div>';
+
+  // 代理店候補に渡すLP（発行済みのもの）
+  var partnerLps = rs.filter(function(r){ return isPartner(r) && String(r.partnerLp || '').trim(); });
+  if (partnerLps.length){
+    html += '<div class="sec"><div class="sec-hd"><h2>代理店候補の方にお渡しするLP</h2></div><div class="rows">';
+    partnerLps.forEach(function(r){
+      html += '<div class="row" style="cursor:default">' +
+        '<div class="l1"><span class="nm">' + h(r.name) + '</span>' +
+        '<span class="tag line">' + h(r.company || '会社名未入力') + '</span></div>' +
+        '<code class="url" style="margin-top:9px">' + h(r.partnerLp) + '</code>' +
+        '<div class="btns"><button class="btn line sm" style="flex:1" type="button" data-copy="' + h(r.partnerLp) + '">この方のLPをコピー</button>' +
+        '<button class="btn plain sm" style="flex:1" type="button" data-share="' + h(r.partnerLp) + '">送る</button></div>' +
+        '</div>';
+    });
+    html += '</div><div class="tiny" style="margin-top:8px">お一人ずつ違うURLです。取り違えのないよう、こちらからコピーしてお送りください。</div></div>';
+  }
+
+  // お知らせ
+  var ns = b().notices || [];
+  if (ns.length){
+    html += '<div class="sec"><div class="sec-hd"><h2>弊社からのお知らせ・最新資料</h2></div><div class="panel">';
+    ns.forEach(function(n2){
+      html += '<div class="note-item"><div class="k">' + h(n2.kind || 'お知らせ') + '</div>' +
+        '<div class="t">' + h(n2.title) + '</div>' +
+        (n2.body ? '<div class="b">' + h(n2.body) + '</div>' : '') +
+        (n2.url ? '<div class="btns"><a class="btn line" href="' + h(n2.url) + '" target="_blank" rel="noopener">' + h(n2.btnLabel || '開く') + '</a></div>' : '') +
+        '</div>';
+    });
+    html += '</div></div>';
+  }
+
+  html += '<p class="tiny" style="margin:26px 2px 10px;line-height:1.9">ご入力・ご修正いただいた内容は、弊社の管理台帳にそのまま反映されます。<br>' +
+    'ご不明な点は、担当までお気軽にご連絡ください。</p>';
+
+  $('view').innerHTML = html;
+  bindCommon();
+  if ($('btnLack')) $('btnLack').onclick = function(){ state.tab='list'; state.status='__lack'; state.kind='all'; window.scrollTo(0,0); render(); };
+}
+function tile(v, l, cls){
+  return '<div class="' + cls + '"><div class="n">' + v + '</div><div class="l">' + l + '</div></div>';
+}
+
+/* ---------------- list ---------------- */
+function visibleReferrals(){
+  return b().referrals.filter(function(r){
+    if (state.kind !== 'all' && r.kind !== state.kind) return false;
+    if (state.status === '__lack') return missingOf(r).length > 0;
+    if (state.status !== 'all' && r.status !== state.status) return false;
+    return true;
+  }).sort(function(x, y){ return String(y.createdAt).localeCompare(String(x.createdAt)); });
+}
+
+function renderList(){
+  var kinds = [['all','すべて'], [opts().kinds[0], 'お客様'], [opts().kinds[1], '代理店候補']];
+  var html = '<div class="sec"><div class="seg">' +
+    kinds.map(function(k){ return '<button type="button" data-k="' + h(k[0]) + '" class="' + (state.kind===k[0]?'on':'') + '">' + h(k[1]) + '</button>'; }).join('') +
+    '</div><div class="chips" style="margin-top:9px">' +
+    [['all','すべて'],['__lack','要追記']].concat(opts().statuses.map(function(s){ return [s,s]; }))
+      .map(function(c){ return '<button type="button" class="chip ' + (state.status===c[0]?'on':'') + '" data-s="' + h(c[0]) + '">' + h(c[1]) + '</button>'; }).join('') +
+    '</div>';
+
+  var rows = visibleReferrals();
+  if (!rows.length){
+    html += '<div class="blank" style="margin-top:12px">該当するご紹介はまだありません。<br>右下の「＋ 紹介」から登録できます。</div></div>';
+  } else {
+    html += '<div class="rows" style="margin-top:12px">';
+    rows.forEach(function(r){
+      var miss = missingOf(r);
+      html += '<div class="row" data-id="' + h(r.id) + '">' +
+        '<div class="l1"><span class="nm">' + h(r.name || '（氏名未入力）') + '</span>' +
+        '<span class="tag" style="' + statusStyle(r.status) + '">' + h(r.status) + '</span>' +
+        '<span class="tag ' + (isPartner(r) ? 'par' : 'cus') + '">' + (isPartner(r) ? '代理店候補' : 'お客様') + '</span></div>' +
+        '<div class="l2">' + h(r.company || '会社名未入力') + (r.product ? '　/　' + h(r.product) : '') +
+          (isPartner(r) && r.ownership ? '　/　' + h(r.ownership) : '') + '</div>' +
+        '<div class="l3">' +
+          (miss.length ? '<span class="tag warn">要追記: ' + h(miss.join('・')) + '</span>' : '<span class="tag ok">情報OK</span>') +
+          (r.briefing && r.briefing !== '未案内' ? '<span class="tag line">説明会: ' + h(r.briefing) + '</span>' : '') +
+          '<span class="tiny">登録 ' + h(String(r.createdAt).slice(0,10)) + '</span>' +
+        '</div></div>';
+    });
+    html += '</div><p class="tiny" style="margin-top:10px">' + rows.length + ' 件を表示しています。タップすると内容を修正できます。</p></div>';
+  }
+  $('view').innerHTML = html;
+  Array.prototype.forEach.call($('view').querySelectorAll('[data-k]'), function(x){
+    x.onclick = function(){ state.kind = x.getAttribute('data-k'); render(); };
+  });
+  Array.prototype.forEach.call($('view').querySelectorAll('[data-s]'), function(x){
+    x.onclick = function(){ state.status = x.getAttribute('data-s'); render(); };
+  });
+  Array.prototype.forEach.call($('view').querySelectorAll('[data-id]'), function(x){
+    x.onclick = function(){ openForm(x.getAttribute('data-id')); };
+  });
+}
+
+/* ---------------- 紹介フォーム ---------------- */
+function openForm(id){
+  var r = null;
+  if (id) b().referrals.forEach(function(x){ if (x.id === id) r = x; });
+  state.editing = r;
+  state.draft = r ? {
+    kind:r.kind, company:r.company, name:r.name, email:r.email, phone:r.phone, detail:r.detail,
+    product:r.product, status:r.status, lostReason:r.lostReason,
+    ownership:r.ownership, rateSelf:r.rateSelf, rateTarget:r.rateTarget,
+    briefing:r.briefing, briefingId:r.briefingId
+  } : {
+    kind:opts().kinds[0], company:'', name:'', email:'', phone:'', detail:'',
+    product:'', status:opts().statuses[0], lostReason:'',
+    ownership:'', rateSelf:'', rateTarget:'', briefing:opts().briefingStates[0], briefingId:''
+  };
+  $('sheetTitle').textContent = r ? 'ご紹介の内容' : 'ご紹介の登録';
+  renderForm();
+  openSheet(true);
+}
+
+function renderForm(){
+  var d = state.draft, o = opts(), r = state.editing;
+  var customer = d.kind === o.kinds[0];
+  var html = '';
+
+  html += '<div class="f"><label>ご紹介の種類<span class="req">必須</span></label><div class="pick">' +
+    '<button type="button" data-kind="' + h(o.kinds[0]) + '" class="' + (customer?'on':'') + '">' +
+      '<span class="t">お客様のご紹介</span><span class="d">AIバード / AI活用研修に興味・購入検討</span></button>' +
+    '<button type="button" data-kind="' + h(o.kinds[1]) + '" class="' + (!customer?'on':'') + '">' +
+      '<span class="t">代理店候補のご紹介</span><span class="d">弊社商品を一緒に売っていただけそうな方</span></button>' +
+    '</div></div>';
+
+  html += inp('company','会社名',d.company,'株式会社◯◯');
+  html += inp('name','氏名',d.name,'山田 太郎',true);
+  html += inp('email','メールアドレス',d.email,'taro@example.com');
+  html += inp('phone','連絡の取れる番号',d.phone,'090-1234-5678');
+
+  if (customer){
+    html += sel('product','興味のある商材',[['','選択してください']].concat(o.products.map(function(p){ return [p,p]; })),d.product);
+  }
+  html += '<div class="f"><label>その方の詳しい情報</label><textarea id="f_detail" placeholder="どんな会社／どんな課題／どこまでお話ししているか／温度感 など">' + h(d.detail) + '</textarea>' +
+    '<div class="hint">分かる範囲で構いません。詳しいほど、弊社から的確にご連絡できます。</div></div>';
+
+  // ── 代理店候補の条件
+  if (!customer){
+    var base = b().agency.rate === '' ? 20 : Number(b().agency.rate);
+    var toss = b().tossRate;
+    html += '<div class="fieldset"><div class="legend">この代理店候補の進め方</div>' +
+      '<div class="f"><div class="pick">' +
+      '<button type="button" data-own="' + h(o.ownerships[0]) + '" class="' + (d.ownership !== o.ownerships[1] ? 'on':'') + '">' +
+        '<span class="t">トスアップ</span><span class="d">弊社がすべて対応します。御社には受注額の' + toss + '%</span></button>' +
+      '<button type="button" data-own="' + h(o.ownerships[1]) + '" class="' + (d.ownership === o.ownerships[1] ? 'on':'') + '">' +
+        '<span class="t">自己管理</span><span class="d">御社が候補を管理し、基本' + base + '%を分け合います</span></button>' +
+      '</div></div>';
+
+    if (d.ownership === o.ownerships[1]){
+      var self = d.rateSelf === '' || d.rateSelf === undefined ? '' : Number(d.rateSelf);
+      var tgt  = d.rateTarget === '' || d.rateTarget === undefined ? '' : Number(d.rateTarget);
+      var sum = (self === '' ? 0 : self) + (tgt === '' ? 0 : tgt);
+      html += '<div class="f2">' +
+        rateInput('rateTarget','候補の取り分', d.rateTarget) +
+        rateInput('rateSelf','御社の取り分', d.rateSelf) +
+        '</div>' +
+        '<div class="bal ' + (sum > base + 0.001 ? 'ng' : 'ok') + '">' +
+          (sum > base + 0.001
+            ? '合計 ' + sum + '% — 御社の基本 ' + base + '% を超えています'
+            : '合計 ' + sum + '% / 基本 ' + base + '%（残り ' + Math.round((base - sum) * 100) / 100 + '%）') +
+        '</div>' +
+        '<div class="hint" style="margin-top:8px">例：基本' + base + '%のうち、候補' + Math.max(base - 5, 1) + '% / 御社5%。配分は御社でお決めいただけます。</div>';
+    } else {
+      html += rateInput('rateSelf','御社の取り分', d.rateSelf === '' || d.rateSelf === undefined ? toss : d.rateSelf) +
+        '<div class="hint" style="margin-top:-8px">トスアップの場合、候補の方は弊社と直接お取引になります。</div>';
+    }
+    html += '</div>';
+
+    if (r && String(r.partnerLp || '').trim()){
+      html += '<div class="fieldset"><div class="legend">この方にお渡しするLP</div>' +
+        '<code class="url">' + h(r.partnerLp) + '</code>' +
+        '<div class="btns"><button class="btn line sm" style="flex:1" type="button" data-copy="' + h(r.partnerLp) + '">コピー</button>' +
+        '<button class="btn plain sm" style="flex:1" type="button" data-share="' + h(r.partnerLp) + '">送る</button></div></div>';
+    } else if (r){
+      html += '<div class="fieldset"><div class="legend">この方にお渡しするLP</div>' +
+        '<div class="tiny">弊社にて準備中です。発行され次第、ここに表示されます。</div></div>';
+    }
+  }
+
+  // ── 説明会
+  if (r){
+    html += '<div class="fieldset"><div class="legend">説明会</div>' +
+      sel('briefing','ご案内の状況', o.briefingStates.map(function(s){ return [s,s]; }), d.briefing) +
+      sel('briefingId','ご希望の日程',
+        [['','（未定・個別調整）']].concat((b().briefings||[]).map(function(x){
+          return [x.id, x.startAt + '　' + x.kind + (x.capacity ? '（定員' + x.capacity + '）' : '')];
+        })), d.briefingId) +
+      (r.briefingAt ? '<div class="tiny">確定している日時：' + h(r.briefingAt) + '</div>' : '') +
+      '</div>';
+  }
+
+  // ── ステータス
+  if (b().canEditStatus){
+    html += sel('status','ステータス', o.statuses.map(function(s){ return [s,s]; }), d.status);
+    if (d.status === '失注'){
+      html += sel('lostReason','失注の理由',[['','選択してください']].concat(o.lostReasons.map(function(s){ return [s,s]; })),d.lostReason);
+    }
+  } else if (r){
+    html += '<div class="f"><label>ステータス<span class="opt">弊社が更新します</span></label>' +
+      '<div><span class="tag" style="' + statusStyle(r.status) + '">' + h(r.status) + '</span>' +
+      (r.lostReason ? ' <span class="tiny">' + h(r.lostReason) + '</span>' : '') + '</div></div>';
+  }
+
+  if (r){
+    html += '<div class="panel pad" style="background:var(--card-2)">' +
+      '<div class="kv"><div class="k">紹介ID</div><div class="v mono">' + h(r.id) + '</div></div>' +
+      '<div class="kv"><div class="k">登録日時</div><div class="v">' + h(r.createdAt) + '</div></div>' +
+      '<div class="kv"><div class="k">最終更新</div><div class="v">' + h(r.updatedAt) + (r.updatedBy ? '（' + h(r.updatedBy) + '）' : '') + '</div></div></div>';
+  }
+
+  $('sheetBody').innerHTML = html;
+  $('sheetFoot').innerHTML =
+    '<button class="btn plain" type="button" id="btnCancel">閉じる</button>' +
+    '<button class="btn" type="button" id="btnSave">' + (r ? '変更を保存' : 'この内容で登録') + '</button>';
+
+  Array.prototype.forEach.call($('sheetBody').querySelectorAll('[data-kind]'), function(x){
+    x.onclick = function(){ collect(); state.draft.kind = x.getAttribute('data-kind'); renderForm(); };
+  });
+  Array.prototype.forEach.call($('sheetBody').querySelectorAll('[data-own]'), function(x){
+    x.onclick = function(){ collect(); state.draft.ownership = x.getAttribute('data-own'); renderForm(); };
+  });
+  ['status','rateSelf','rateTarget'].forEach(function(k){
+    var el = $('f_' + k);
+    if (el) el[k === 'status' ? 'onchange' : 'oninput'] = function(){ collect(); renderForm(); focusBack('f_' + k); };
+  });
+  bindCommon($('sheetBody'));
+  $('btnCancel').onclick = function(){ openSheet(false); };
+  $('btnSave').onclick = save;
+}
+function focusBack(id){
+  var el = $(id);
+  if (el){ el.focus(); if (el.setSelectionRange && el.type === 'text') el.setSelectionRange(el.value.length, el.value.length); }
+}
+function inp(key,label,value,ph,req){
+  return '<div class="f"><label>' + h(label) + (req ? '<span class="req">必須</span>' : '<span class="opt">任意</span>') +
+    '</label><input id="f_' + key + '" type="text" value="' + h(value) + '" placeholder="' + h(ph||'') + '"></div>';
+}
+function rateInput(key,label,value){
+  return '<div class="f"><label>' + h(label) + '</label>' +
+    '<div class="split"><input id="f_' + key + '" type="number" inputmode="decimal" min="0" max="100" step="0.5" value="' + h(value) + '"><span class="eq">%</span></div></div>';
+}
+function sel(key,label,pairs,value){
+  return '<div class="f"><label>' + h(label) + '</label><select id="f_' + key + '">' +
+    pairs.map(function(p){ return '<option value="' + h(p[0]) + '"' + (String(value)===String(p[0])?' selected':'') + '>' + h(p[1]) + '</option>'; }).join('') +
+    '</select></div>';
+}
+function collect(){
+  ['company','name','email','phone','detail','product','status','lostReason',
+   'ownership','rateSelf','rateTarget','briefing','briefingId'].forEach(function(k){
+    var el = $('f_' + k);
+    if (el) state.draft[k] = el.value;
+  });
+}
+function save(){
+  collect();
+  var d = state.draft;
+  if (!String(d.name).trim()){ toast('氏名を入力してください', true); return; }
+  if (state.editing){
+    call('apiAgencyUpdateReferral', [TOKEN, state.editing.id, d], function(){ openSheet(false); toast('保存しました'); }, '保存しています');
+  } else {
+    call('apiAgencyCreateReferral', [TOKEN, d], function(){ openSheet(false); toast('登録しました。ありがとうございます。'); }, '登録しています');
+  }
+}
+
+/* ---------------- 紹介文をつくる ---------------- */
+function renderCopy(){
+  var c = state.copy;
+  var vars = opts().variables || [];
+  var html = '<div class="sec"><div class="sec-hd"><h2>紹介文をつくる</h2></div>' +
+    '<div class="panel pad">' +
+    '<div class="muted">お渡ししたい相手と送り方を選ぶと、そのまま送れる文面をご用意します。' +
+    'ご自身が過去に送ったメッセージを貼っていただくと、書き方の癖に寄せて整えます。</div>' +
+
+    '<div class="f" style="margin-top:16px"><label>誰に送りますか</label><div class="pick">' +
+      '<button type="button" data-ct="お客様" class="' + (c.target==='お客様'?'on':'') + '">' +
+        '<span class="t">お客様</span><span class="d">AIバード / AI活用研修に興味がありそうな方</span></button>' +
+      '<button type="button" data-ct="代理店候補" class="' + (c.target==='代理店候補'?'on':'') + '">' +
+        '<span class="t">代理店候補</span><span class="d">一緒に売っていただけそうな方</span></button>' +
+    '</div></div>' +
+
+    '<div class="f"><label>送り方</label><div class="seg">' +
+      ['LINE','メール'].map(function(x){ return '<button type="button" data-cc="' + x + '" class="' + (c.channel===x?'on':'') + '">' + x + '</button>'; }).join('') +
+    '</div></div>' +
+
+    '<div class="f2">' +
+      '<div class="f"><label>相手のお名前</label><input id="v_aite" type="text" value="' + h(c.values['{相手}']||'') + '" placeholder="山田"></div>' +
+      '<div class="f"><label>ご自身のお名前</label><input id="v_jibun" type="text" value="' + h(c.values['{自分}']|| (b().agency.contact || '')) + '" placeholder="田中"></div>' +
+    '</div>' +
+    '<div class="f"><label>案内するURL<span class="opt">未入力なら御社専用LP</span></label>' +
+      '<input id="v_lp" type="text" value="' + h(c.values['{LP}'] !== undefined ? c.values['{LP}'] : (b().agency.lpUrl||'')) + '"></div>' +
+
+    '<div class="f"><label>過去に送ったメッセージ<span class="opt">任意・貼るほど自分の文体に近づきます</span></label>' +
+      '<textarea id="v_samples" placeholder="LINEやメールで実際に送った文面を、そのまま貼り付けてください。複数まとめてでも構いません。">' + h(c.samples) + '</textarea>' +
+      '<div class="hint">' + (b().aiRewrite
+        ? 'AIが文体を読み取って書き換えます。送信前に必ず内容をご確認ください。'
+        : 'あいさつ・一人称・呼び方・絵文字・改行の癖を写し取って整えます。') + '</div></div>' +
+
+    '<div class="btns"><button class="btn" type="button" id="btnGen">文面をつくる</button></div>' +
+    '</div></div>';
+
+  if (c.result){
+    html += '<div class="sec"><div class="sec-hd"><h2>できあがった文面</h2>' +
+      '<button class="more" type="button" id="btnRegen">作り直す</button></div>' +
+      '<div class="engine">' + h(c.result.note) + '</div>';
+    c.result.items.forEach(function(it, i){
+      html += '<div class="result">' +
+        '<div class="rh"><span class="tag cus">案' + (i+1) + '</span><span class="a">' + h(it.angle) + '</span></div>' +
+        '<div class="rb">' + h(it.text) + '</div>' +
+        '<div class="rf"><div class="btns" style="margin-top:0">' +
+          '<button class="btn line sm" style="flex:1" type="button" data-copy="' + h(it.text) + '">コピー</button>' +
+          '<button class="btn plain sm" style="flex:1" type="button" data-share="' + h(it.text) + '">そのまま送る</button>' +
+        '</div></div></div>';
+    });
+    html += '<p class="tiny" style="margin-top:6px">送信前に、お相手に合わせて一言だけ手を入れていただくと効果的です。</p></div>';
+  } else {
+    html += '<div class="sec"><div class="blank">条件を選んで「文面をつくる」を押してください。</div></div>';
+  }
+
+  $('view').innerHTML = html;
+  Array.prototype.forEach.call($('view').querySelectorAll('[data-ct]'), function(x){
+    x.onclick = function(){ grabCopy(); state.copy.target = x.getAttribute('data-ct'); render(); };
+  });
+  Array.prototype.forEach.call($('view').querySelectorAll('[data-cc]'), function(x){
+    x.onclick = function(){ grabCopy(); state.copy.channel = x.getAttribute('data-cc'); render(); };
+  });
+  $('btnGen').onclick = generate;
+  if ($('btnRegen')) $('btnRegen').onclick = generate;
+  bindCommon();
+}
+function grabCopy(){
+  var g = function(id){ var el = $(id); return el ? el.value : ''; };
+  state.copy.values = {
+    '{相手}': g('v_aite'),
+    '{自分}': g('v_jibun'),
+    '{会社}': b().company,
+    '{LP}':  g('v_lp'),
+    '{日時}': ((b().briefings||[])[0] || {}).startAt || 'ご都合の良い日時'
+  };
+  state.copy.samples = g('v_samples');
+}
+function generate(){
+  grabCopy();
+  var c = state.copy;
+  veil(true, b().aiRewrite && c.samples.trim() ? '文体を読み取っています' : '文面を用意しています');
+  google.script.run
+    .withSuccessHandler(function(res){
+      veil(false); state.copy.result = res; render();
+      window.scrollTo({ top: 400, behavior:'smooth' });
+    })
+    .withFailureHandler(function(err){
+      veil(false); toast((err && err.message) ? err.message : '文面をつくれませんでした', true);
+    })
+    .apiAgencyGenerateCopy(TOKEN, { target:c.target, channel:c.channel, values:c.values, samples:c.samples });
+}
+
+/* ---------------- 説明会 ---------------- */
+function renderMeet(){
+  var list = b().briefings || [];
+  var html = '<div class="sec"><div class="sec-hd"><h2>説明会の日程</h2></div>';
+  if (!list.length){
+    html += '<div class="blank">現在ご案内できる日程がありません。<br>個別調整をご希望の場合は下記からご予約ください。</div>';
+  } else {
+    html += '<div class="rows">';
+    list.forEach(function(x){
+      var left = x.capacity ? (Number(x.capacity) - Number(x.booked || 0)) : null;
+      html += '<div class="row" style="cursor:default">' +
+        '<div class="l1"><span class="nm">' + h(x.startAt) + '</span>' +
+        '<span class="tag cus">' + h(x.kind) + '</span>' +
+        (left !== null && !isNaN(left) ? '<span class="tag ' + (left <= 2 ? 'warn' : 'line') + '">残り' + Math.max(left,0) + '席</span>' : '') +
+        '</div>' +
+        (x.note ? '<div class="l2">' + h(x.note) + '</div>' : '') +
+        '<div class="btns"><button class="btn line sm" style="flex:1" type="button" data-meet="' + h(x.id) + '">この日程を案内する</button>' +
+        (x.url ? '<button class="btn plain sm" style="flex:1" type="button" data-copy="' + h(x.url) + '">参加URLをコピー</button>' : '') +
+        '</div></div>';
+    });
+    html += '</div>';
+  }
+  html += '</div>';
+
+  if (b().individualUrl){
+    html += '<div class="sec"><div class="sec-hd"><h2>日程が合わないとき</h2></div><div class="panel pad">' +
+      '<div class="muted">上記の日程が合わない方には、弊社担当の予約ページから直接お選びいただけます。' +
+      'お名前とご連絡先は、ご紹介者ご本人にご入力いただいてください。</div>' +
+      '<code class="url" style="margin-top:10px">' + h(b().individualUrl) + '</code>' +
+      '<div class="btns"><button class="btn line" type="button" data-copy="' + h(b().individualUrl) + '">予約URLをコピー</button>' +
+      '<a class="btn" href="' + h(b().individualUrl) + '" target="_blank" rel="noopener">開く</a></div></div></div>';
+  }
+
+  // 説明会の状況
+  var rs = b().referrals.filter(function(r){ return r.briefing && r.briefing !== '未案内'; });
+  if (rs.length){
+    html += '<div class="sec"><div class="sec-hd"><h2>ご案内中の方</h2></div><div class="rows">';
+    rs.forEach(function(r){
+      html += '<div class="row" data-id="' + h(r.id) + '">' +
+        '<div class="l1"><span class="nm">' + h(r.name) + '</span>' +
+        '<span class="tag ' + (r.briefing === '予約確定' || r.briefing === '参加済' ? 'ok' : 'line') + '">' + h(r.briefing) + '</span></div>' +
+        (r.briefingAt ? '<div class="l2">' + h(r.briefingAt) + '</div>' : '') +
+        '</div>';
+    });
+    html += '</div></div>';
+  }
+
+  $('view').innerHTML = html;
+  Array.prototype.forEach.call($('view').querySelectorAll('[data-id]'), function(x){
+    x.onclick = function(){ openForm(x.getAttribute('data-id')); };
+  });
+  Array.prototype.forEach.call($('view').querySelectorAll('[data-meet]'), function(x){
+    x.onclick = function(){ openMeetPicker(x.getAttribute('data-meet')); };
+  });
+  bindCommon();
+}
+
+/** 日程を選んで、どの紹介先に案内するか決める */
+function openMeetPicker(briefingId){
+  var meet = null;
+  (b().briefings||[]).forEach(function(x){ if (x.id === briefingId) meet = x; });
+  if (!meet) return;
+  var candidates = b().referrals.filter(function(r){ return r.status !== '失注' && r.status !== '取り下げ'; });
+
+  $('sheetTitle').textContent = 'この日程を案内する';
+  var html = '<div class="panel pad" style="background:var(--card-2);margin-bottom:16px">' +
+    '<div class="kv"><div class="k">日時</div><div class="v">' + h(meet.startAt) + '</div></div>' +
+    '<div class="kv"><div class="k">対象</div><div class="v">' + h(meet.kind) + '</div></div>' +
+    (meet.note ? '<div class="kv"><div class="k">備考</div><div class="v">' + h(meet.note) + '</div></div>' : '') + '</div>';
+
+  if (!candidates.length){
+    html += '<div class="blank">先に「ご紹介」を登録してください。</div>';
+  } else {
+    html += '<div class="f"><label>どなたをご案内しますか</label><select id="f_meetTo">' +
+      candidates.map(function(r){
+        return '<option value="' + h(r.id) + '">' + h(r.name) + (r.company ? '（' + h(r.company) + '）' : '') + '</option>';
+      }).join('') + '</select></div>';
+    var text = meet.startAt + ' に開催の' + meet.kind + 'のご案内です。\n' +
+      (meet.url ? '\n参加URL: ' + meet.url : '') + (meet.note ? '\n' + meet.note : '');
+    html += '<div class="f"><label>ご案内文</label><textarea id="f_meetText" style="min-height:130px">' + h(text) + '</textarea></div>' +
+      '<div class="btns"><button class="btn line" type="button" data-copy="' + h(text) + '">案内文をコピー</button>' +
+      '<button class="btn plain" type="button" data-share="' + h(text) + '">送る</button></div>';
+  }
+
+  $('sheetBody').innerHTML = html;
+  $('sheetFoot').innerHTML = '<button class="btn plain" type="button" id="btnCancel">閉じる</button>' +
+    (candidates.length ? '<button class="btn" type="button" id="btnMeetSave">案内済みとして記録</button>' : '');
+  $('btnCancel').onclick = function(){ openSheet(false); };
+  if ($('btnMeetSave')){
+    $('btnMeetSave').onclick = function(){
+      var id = $('f_meetTo').value;
+      call('apiAgencyUpdateReferral', [TOKEN, id, { briefing:'案内済', briefingId: meet.id }],
+        function(){ openSheet(false); toast('記録しました'); }, '記録しています');
+    };
+  }
+  bindCommon($('sheetBody'));
+  openSheet(true);
+}
+
+/* ---------------- 共通のボタン束ね ---------------- */
+function bindCommon(root){
+  root = root || $('view');
+  Array.prototype.forEach.call(root.querySelectorAll('[data-copy]'), function(x){
+    x.onclick = function(e){ e.stopPropagation(); copyText(x.getAttribute('data-copy')); };
+  });
+  Array.prototype.forEach.call(root.querySelectorAll('[data-share]'), function(x){
+    x.onclick = function(e){ e.stopPropagation(); share(x.getAttribute('data-share')); };
+  });
+  Array.prototype.forEach.call(root.querySelectorAll('a[href]'), function(x){
+    x.onclick = function(e){ e.stopPropagation(); };
+  });
+}
+
+/* ---------------- boot ---------------- */
+$('fab').onclick = function(){ openForm(null); };
+$('mask').onclick = function(){ openSheet(false); };
+$('sheetClose').onclick = function(){ openSheet(false); };
+$('btnRefresh').onclick = function(){ call('apiAgencyRefresh', [TOKEN], function(){ toast('最新の状態にしました'); }, '読み込んでいます'); };
+document.addEventListener('visibilitychange', function(){
+  if (document.visibilityState === 'visible' && !$('sheet').classList.contains('on')){
+    google.script.run.withSuccessHandler(function(res){ state.board = res; render(); })
+      .withFailureHandler(function(){}).apiAgencyRefresh(TOKEN);
+  }
+});
+
+render();
+</script>
+</body>
+</html>
