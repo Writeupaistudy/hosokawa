@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AIバード｜5時間無料モニターのご案内</title>
+<meta name="description" content="今なら、あなたの会社の「これ」を5時間ぶん無料でお手伝いします。費用ゼロ・専門知識不要。まずは気軽にお問い合わせください。">
+<meta name="robots" content="noindex">
+<style>
+  :root{
+    --teal:#1f9d8f;
+    --teal-d:#0f6f66;
+    --teal-l:#e8f5f3;
+    --coral:#ff7a59;
+    --line:#06c755;
+    --ink:#2c3a38;
+    --gray:#6b7a78;
+    --line-gray:#e6ecea;
+    --bg:#f6f9f8;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic",Meiryo,sans-serif;
+    font-size:16px;
+    line-height:1.85;
+    -webkit-text-size-adjust:100%;
+  }
+  .wrap{max-width:600px;margin:0 auto;background:#fff;}
+  section{padding:36px 20px;}
+  h1,h2,h3{margin:0;line-height:1.5;font-weight:700;}
+  p{margin:0;}
+
+  /* ---------- ヒーロー ---------- */
+  .hero{
+    background:linear-gradient(160deg,var(--teal) 0%,var(--teal-d) 100%);
+    color:#fff;
+    padding:34px 20px 40px;
+    text-align:center;
+  }
+  .badge{
+    display:inline-block;
+    background:var(--coral);
+    color:#fff;
+    font-size:13px;
+    font-weight:700;
+    letter-spacing:.02em;
+    padding:6px 14px;
+    border-radius:999px;
+    margin-bottom:18px;
+  }
+  .hero h1{
+    font-size:27px;
+    letter-spacing:-.01em;
+    margin-bottom:16px;
+  }
+  .hero h1 .em{
+    display:inline-block;
+    background:rgba(255,255,255,.16);
+    border-radius:8px;
+    padding:0 6px;
+  }
+  .hero .lead{font-size:15px;opacity:.95;margin-bottom:20px;}
+  .hero-note{
+    display:inline-flex;
+    gap:10px;
+    flex-wrap:wrap;
+    justify-content:center;
+  }
+  .chip{
+    background:rgba(255,255,255,.18);
+    border-radius:999px;
+    font-size:13px;
+    font-weight:700;
+    padding:6px 14px;
+  }
+  .hero-brand{
+    font-size:12px;
+    letter-spacing:.14em;
+    opacity:.85;
+    margin-bottom:14px;
+  }
+
+  /* ---------- 見出し ---------- */
+  .sec-title{font-size:21px;margin-bottom:8px;}
+  .sec-sub{font-size:14px;color:var(--gray);margin-bottom:22px;}
+
+  /* ---------- オファーカード ---------- */
+  .cards{display:grid;gap:12px;}
+  .card{
+    background:#fff;
+    border:1px solid var(--line-gray);
+    border-radius:16px;
+    padding:16px 16px 16px 15px;
+    display:flex;
+    gap:13px;
+    align-items:flex-start;
+    box-shadow:0 1px 3px rgba(15,111,102,.05);
+  }
+  .card .ico{
+    flex:0 0 42px;
+    height:42px;
+    border-radius:12px;
+    background:var(--teal-l);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:20px;
+    line-height:1;
+  }
+  .card h3{font-size:16px;margin-bottom:3px;}
+  .card p{font-size:13.5px;color:var(--gray);line-height:1.7;}
+  .card-more{
+    margin-top:14px;
+    background:var(--teal-l);
+    border-radius:14px;
+    padding:14px 16px;
+    font-size:14px;
+    color:var(--teal-d);
+    font-weight:700;
+    line-height:1.7;
+  }
+  .card-more span{display:block;font-weight:400;color:var(--gray);font-size:13px;margin-top:2px;}
+
+  /* ---------- ステップ ---------- */
+  .steps{display:grid;gap:12px;counter-reset:step;}
+  .step{
+    display:flex;
+    gap:13px;
+    align-items:flex-start;
+    background:#fff;
+    border:1px solid var(--line-gray);
+    border-radius:16px;
+    padding:15px 16px;
+  }
+  .step .num{
+    flex:0 0 30px;
+    height:30px;
+    border-radius:50%;
+    background:var(--teal);
+    color:#fff;
+    font-weight:700;
+    font-size:14px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  .step h3{font-size:15.5px;margin-bottom:2px;}
+  .step p{font-size:13.5px;color:var(--gray);line-height:1.7;}
+
+  /* ---------- 安心 ---------- */
+  .safe{background:var(--teal-l);}
+  .safe-list{display:grid;gap:10px;}
+  .safe-item{
+    background:#fff;
+    border-radius:14px;
+    padding:14px 16px;
+  }
+  .safe-item h3{font-size:15.5px;margin-bottom:2px;}
+  .safe-item p{font-size:13.5px;color:var(--gray);line-height:1.7;}
+  .safe-item .mark{color:var(--teal);font-weight:700;margin-right:6px;}
+
+  /* ---------- お問い合わせフォーム ---------- */
+  .form-sec{padding-top:34px;}
+  .notice{
+    border:1px dashed var(--coral);
+    background:#fff6f3;
+    border-radius:14px;
+    padding:14px 16px;
+    font-size:13.5px;
+    color:#b4482c;
+    line-height:1.7;
+    margin-bottom:22px;
+  }
+  .notice b{color:#8f3520;}
+  form{display:grid;gap:14px;}
+  label{display:block;font-size:13.5px;font-weight:700;margin-bottom:5px;}
+  .req{
+    font-size:11px;
+    color:#fff;
+    background:var(--coral);
+    border-radius:4px;
+    padding:1px 6px;
+    margin-left:6px;
+    font-weight:700;
+    vertical-align:1px;
+  }
+  .opt{
+    font-size:11px;
+    color:var(--gray);
+    background:#eef2f1;
+    border-radius:4px;
+    padding:1px 6px;
+    margin-left:6px;
+    font-weight:700;
+    vertical-align:1px;
+  }
+  input[type=text],input[type=email],input[type=tel],select,textarea{
+    width:100%;
+    font-family:inherit;
+    font-size:16px;
+    color:var(--ink);
+    background:#fff;
+    border:1px solid #d5dedc;
+    border-radius:12px;
+    padding:12px 13px;
+    line-height:1.6;
+  }
+  textarea{min-height:96px;resize:vertical;}
+  input:focus,select:focus,textarea:focus{
+    outline:none;
+    border-color:var(--teal);
+    box-shadow:0 0 0 3px rgba(31,157,143,.14);
+  }
+  .hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;}
+  .btn{
+    display:block;
+    width:100%;
+    border:none;
+    border-radius:14px;
+    font-family:inherit;
+    font-size:17px;
+    font-weight:700;
+    color:#fff;
+    padding:16px;
+    text-align:center;
+    text-decoration:none;
+    cursor:pointer;
+    line-height:1.5;
+  }
+  .btn-main{background:var(--coral);box-shadow:0 4px 0 #e3603f;}
+  .btn-main:active{transform:translateY(2px);box-shadow:0 2px 0 #e3603f;}
+  .btn[disabled]{opacity:.6;cursor:default;}
+  .form-note{font-size:12.5px;color:var(--gray);line-height:1.7;text-align:center;}
+  .form-alt{font-size:13px;color:var(--gray);text-align:center;line-height:1.8;}
+  .form-alt a{color:var(--teal-d);}
+  .msg{
+    border-radius:14px;
+    padding:16px;
+    font-size:14px;
+    line-height:1.8;
+    display:none;
+  }
+  .msg.ok{background:var(--teal-l);color:var(--teal-d);border:1px solid #bfe3de;}
+  .msg.ng{background:#fff3f0;color:#b4482c;border:1px solid #f3cfc4;}
+  .msg.show{display:block;}
+
+  /* ---------- CTA（公式LINE） ---------- */
+  .cta{background:var(--teal-l);text-align:center;}
+  .cta h2{font-size:20px;margin-bottom:10px;}
+  .cta p{font-size:14px;color:var(--gray);margin-bottom:18px;line-height:1.8;}
+  .btn-line{background:var(--line);box-shadow:0 4px 0 #05a144;}
+  .btn-line:active{transform:translateY(2px);box-shadow:0 2px 0 #05a144;}
+  .cta small{display:block;font-size:12.5px;color:var(--gray);margin-top:12px;}
+
+  /* ---------- フッター ---------- */
+  footer{
+    background:#12332f;
+    color:#cfe0dd;
+    padding:26px 20px 34px;
+    text-align:center;
+    font-size:12.5px;
+    line-height:1.9;
+  }
+  footer .fname{color:#fff;font-weight:700;font-size:14px;display:block;margin-bottom:6px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ============ 1. ヒーロー ============ -->
+  <section class="hero">
+    <p class="hero-brand">AI BIRD ｜ AIの家庭教師</p>
+    <!-- 先着◯社と明記する場合はここ（例：「今だけ・先着100社でご案内中」） -->
+    <span class="badge">今だけ・先着でご案内中</span>
+    <h1>あなたの会社の<br>「<span class="em">これ</span>」、5時間ぶん、<br>無料でやります。</h1>
+    <p class="lead">AIに詳しいスタッフが実際に手を動かして、<br>最初の成果物まで一緒に作ります。</p>
+    <div class="hero-note">
+      <span class="chip">費用ゼロ</span>
+      <span class="chip">専門知識も不要</span>
+    </div>
+  </section>
+
+  <!-- ============ 2. オファー一覧（主役） ============ -->
+  <section>
+    <h2 class="sec-title">たとえば、こんなことができます</h2>
+    <p class="sec-sub">気になるものを1つ選ぶだけでOK。迷ったら「相談」でも大丈夫です。</p>
+
+    <div class="cards">
+      <div class="card">
+        <div class="ico">🔁</div>
+        <div>
+          <h3>毎日の面倒な手作業を、1つ自動化</h3>
+          <p>集計・転記・入力など、繰り返している作業をひとつ選んで自動化します。</p>
+        </div>
+      </div>
+      <div class="card">
+        <div class="ico">📄</div>
+        <div>
+          <h3>紙・PDFの書類を、AIでデータに</h3>
+          <p>請求書・発注書・通帳などを読み取って、そのまま使える形にします。</p>
+        </div>
+      </div>
+      <div class="card">
+        <div class="ico">🎨</div>
+        <div>
+          <h3>SNS投稿やチラシを、社内で作れる形に</h3>
+          <p>毎回外注しなくても、社内でさっと作れる手順とひな形を用意します。</p>
+        </div>
+      </div>
+      <div class="card">
+        <div class="ico">📍</div>
+        <div>
+          <h3>Googleの口コミ・店舗情報を整える</h3>
+          <p>口コミへの返信や、定期投稿のまわし方を一緒に整えます。</p>
+        </div>
+      </div>
+      <div class="card">
+        <div class="ico">💬</div>
+        <div>
+          <h3>公式LINEを、届いて動く形で立ち上げ</h3>
+          <p>friend登録のあとに何を送るか。最初の一連の流れまで作ります。</p>
+        </div>
+      </div>
+      <div class="card">
+        <div class="ico">🧭</div>
+        <div>
+          <h3>「うちはAIで何ができる？」を一緒に洗い出す</h3>
+          <p>やることが決まっていなくてもOK。使えそうな場所から探します。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="card-more">
+      ここにないことでも大丈夫です。
+      <span>やりたいことを、そのまま相談してください。</span>
+    </div>
+  </section>
+
+  <!-- ============ 3. 使い方（3ステップ） ============ -->
+  <section style="background:#fbfdfc;">
+    <h2 class="sec-title">使い方は、3ステップだけ</h2>
+    <p class="sec-sub">お客様の作業は、ほとんどありません。</p>
+    <div class="steps">
+      <div class="step">
+        <div class="num">1</div>
+        <div>
+          <h3>気軽に問い合わせ</h3>
+          <p>下のフォームから、ひとことで大丈夫です。</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">2</div>
+        <div>
+          <h3>やることを一緒に決める</h3>
+          <p>お話をうかがって、5時間でできることを一緒に選びます。</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">3</div>
+        <div>
+          <h3>5時間で作って、お渡し</h3>
+          <p>こちらで手を動かして、そのまま使える形にしてお渡しします。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 4. 安心の3点 ============ -->
+  <section class="safe">
+    <h2 class="sec-title">はじめる前に、3つだけ</h2>
+    <p class="sec-sub">気になるところだと思うので、先にお伝えします。</p>
+    <div class="safe-list">
+      <div class="safe-item">
+        <h3><span class="mark">✓</span>費用はかかりません</h3>
+        <p>モニターでのご案内なので、この5時間ぶんの費用はいただきません。</p>
+      </div>
+      <div class="safe-item">
+        <h3><span class="mark">✓</span>専門知識は要りません</h3>
+        <p>AIを触ったことがなくて大丈夫です。むずかしい話はこちらで引き受けます。</p>
+      </div>
+      <div class="safe-item">
+        <h3><span class="mark">✓</span>売り込みはしません</h3>
+        <p>やってみて良かったら、そのときに続きを考えていただければ十分です。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 5. お問い合わせフォーム（メインの受け口） ============ -->
+  <section class="form-sec" id="contact">
+    <h2 class="sec-title">まずは、お問い合わせから</h2>
+    <p class="sec-sub">入力は30秒ほど。相談だけでもかまいません。</p>
+
+    <!-- 先着◯社と明記する場合はここ（例：「先着100社さまで締め切ります」に差し替え） -->
+    <div class="notice">
+      <b>枠に限りがあり、先着順でのご案内です。</b><br>
+      混み合う場合は順番待ちのご案内になることがあります。
+    </div>
+
+    <form id="contactForm" novalidate>
+      <div>
+        <label for="company">会社名<span class="opt">任意</span></label>
+        <input type="text" id="company" name="company" autocomplete="organization" placeholder="株式会社◯◯">
+      </div>
+      <div>
+        <label for="name">お名前<span class="req">必須</span></label>
+        <input type="text" id="name" name="name" autocomplete="name" placeholder="山田 太郎" required>
+      </div>
+      <div>
+        <label for="email">メールアドレス<span class="req">必須</span></label>
+        <input type="email" id="email" name="email" autocomplete="email" placeholder="you@example.com" required>
+      </div>
+      <div>
+        <label for="tel">お電話番号<span class="opt">任意</span></label>
+        <input type="tel" id="tel" name="tel" autocomplete="tel" placeholder="03-0000-0000">
+      </div>
+      <div>
+        <label for="topic">気になるもの<span class="opt">任意</span></label>
+        <select id="topic" name="topic">
+          <option value="">まだ決めていない／相談したい</option>
+          <option>毎日の面倒な手作業を、1つ自動化</option>
+          <option>紙・PDFの書類を、AIでデータに</option>
+          <option>SNS投稿やチラシを、社内で作れる形に</option>
+          <option>Googleの口コミ・店舗情報を整える</option>
+          <option>公式LINEを、届いて動く形で立ち上げ</option>
+          <option>うちはAIで何ができる？を一緒に洗い出す</option>
+          <option>この中にないこと</option>
+        </select>
+      </div>
+      <div>
+        <label for="message">やってみたいこと・ひとこと<span class="opt">任意</span></label>
+        <textarea id="message" name="message" placeholder="例）毎月の請求書の入力が大変です。&#10;例）とりあえず話を聞いてみたいです。"></textarea>
+      </div>
+
+      <!-- 迷惑送信よけ（人には見えません） -->
+      <div class="hp" aria-hidden="true">
+        <label for="website">ここは入力しないでください</label>
+        <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+      </div>
+
+      <button type="submit" class="btn btn-main" id="submitBtn">この内容で問い合わせる</button>
+      <p class="form-note">
+        いただいた内容は、ご案内の連絡にだけ使います。<br>
+        しつこい営業のご連絡はいたしません。
+      </p>
+    </form>
+
+    <div class="msg ok" id="msgOk" role="status">
+      <b>ありがとうございます。受け付けました。</b><br>
+      担当者から、2〜3営業日以内にご連絡します。少々お待ちください。
+    </div>
+    <div class="msg ng" id="msgNg" role="alert">
+      <b>うまく送信できませんでした。</b><br>
+      お手数ですが、時間をおいて再度お試しいただくか、下の公式LINEからご連絡ください。
+    </div>
+
+    <p class="form-alt" style="margin-top:16px;">
+      うまく送れないときは<br>
+      <a href="https://form.run/@writeup-2mQ35SCXFMMAN3BIBKah" target="_blank" rel="noopener">こちらのフォーム</a>からでも受け付けています。
+    </p>
+  </section>
+
+  <!-- ============ 6. CTA（公式LINE） ============ -->
+  <section class="cta">
+    <!-- 先着◯社と明記する場合はここ（例：「先着100社さまでご案内中」） -->
+    <h2>LINEからでも、大丈夫です。</h2>
+    <p>
+      枠に限りがあり先着順のため、<br>
+      混み合う場合は順番待ちのご案内になります。<br>
+      <b style="color:var(--teal-d);">まず話を聞いてみたいだけでもOK</b>です。
+    </p>
+    <!-- ↓ ここに公式LINEのURLを入れる（例: https://lin.ee/xxxxxxx）※現在は仮リンク -->
+    <a href="#" class="btn btn-line">公式LINEで気軽に聞いてみる</a>
+    <small>友だち追加してひとこと送るだけ。<br>そのまま何もしなくても大丈夫です。</small>
+  </section>
+
+  <!-- ============ フッター ============ -->
+  <footer>
+    <span class="fname">AIバード ｜ 株式会社ライトアップ</span>
+    本ページはモニター向けのご案内です。<br>
+    内容・提供枠は予告なく変更になる場合があります。
+  </footer>
+
+</div>
+
+<script>
+(function () {
+  /* ============================================================
+     送信先：Google Apps Script の Web アプリ URL をここに貼る
+     （gas/monitor-lp-form.gs をデプロイして取得した /exec のURL）
+     例: https://script.google.com/macros/s/AKfycb.../exec
+     ============================================================ */
+  var GAS_ENDPOINT = ""; // ← ここに公開URLを貼り付ける
+
+  var form = document.getElementById("contactForm");
+  var btn = document.getElementById("submitBtn");
+  var msgOk = document.getElementById("msgOk");
+  var msgNg = document.getElementById("msgNg");
+
+  function show(el) { el.classList.add("show"); }
+  function hide(el) { el.classList.remove("show"); }
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    hide(msgOk); hide(msgNg);
+
+    var f = form.elements;
+
+    // 迷惑送信よけ：見えない欄が埋まっていたら、送ったふりをして終了
+    if (f.website.value) { form.style.display = "none"; show(msgOk); return; }
+
+    var name = f.name.value.trim();
+    var email = f.email.value.trim();
+    if (!name) { alert("お名前をご入力ください。"); f.name.focus(); return; }
+    if (!email || email.indexOf("@") < 1) { alert("メールアドレスをご確認ください。"); f.email.focus(); return; }
+
+    if (!GAS_ENDPOINT) {
+      // 送信先が未設定のあいだは、正直に別導線をご案内する
+      show(msgNg);
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = "送信しています…";
+
+    var payload = {
+      timestamp: new Date().toISOString(),
+      company: f.company.value.trim(),
+      name: name,
+      email: email,
+      tel: f.tel.value.trim(),
+      topic: f.topic.value,
+      message: f.message.value.trim(),
+      source: location.href
+    };
+
+    // text/plain で送ることで、プリフライト（CORS）を発生させない
+    fetch(GAS_ENDPOINT, {
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(payload)
+    }).then(function () {
+      form.style.display = "none";
+      show(msgOk);
+      msgOk.scrollIntoView({ behavior: "smooth", block: "center" });
+    }).catch(function () {
+      btn.disabled = false;
+      btn.textContent = "この内容で問い合わせる";
+      show(msgNg);
+    });
+  });
+})();
+</script>
+</body>
+</html>
