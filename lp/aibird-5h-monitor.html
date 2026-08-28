@@ -18,6 +18,8 @@
     --gray:#69807c;
     --hair:#e4ecea;
     --bg:#eef2f1;
+    --mid:#41615c;
+    --serif:Georgia,"Times New Roman","Hiragino Mincho ProN","Yu Mincho",serif;
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
@@ -58,7 +60,7 @@
     overflow:hidden;
   }
   .hero::after{ /* 大きな 5h のウォーターマーク */
-    content:"5h";
+    content:"5h";font-family:var(--serif);
     position:absolute;right:-14px;bottom:-46px;
     font-size:170px;font-weight:800;font-style:italic;
     letter-spacing:-.06em;line-height:1;
@@ -77,14 +79,15 @@
     padding:6px 14px;border-radius:6px;margin-bottom:20px;
     box-shadow:0 6px 18px rgba(0,0,0,.16);
   }
-  .hero h1{font-size:30px;line-height:1.5;margin-bottom:20px;letter-spacing:-.02em;}
+  .hero h1{font-size:26px;line-height:1.55;margin-bottom:20px;letter-spacing:-.02em;}
   .hero h1 .mk{
-    background:linear-gradient(transparent 62%, rgba(255,122,89,.85) 62%);
+    background:linear-gradient(transparent 74%, rgba(255,122,89,.9) 74%);
     padding:0 2px;
   }
   .hero h1 .big{
-    font-size:38px;font-style:italic;letter-spacing:-.03em;
-    padding:0 2px;
+    font-family:var(--serif);
+    font-size:31px;font-style:italic;font-weight:700;
+    letter-spacing:-.02em;padding:0 3px;
   }
   .hero .lead{font-size:14.5px;line-height:1.9;opacity:.92;margin-bottom:24px;}
   .facts{display:flex;gap:10px;}
@@ -94,7 +97,8 @@
     border:1px solid rgba(255,255,255,.18);
     border-radius:12px;padding:11px 6px;text-align:center;
   }
-  .fact b{display:block;font-size:15px;line-height:1.4;}
+  .fact b{display:block;font-size:16px;line-height:1.4;}
+  .fact b .n{font-family:var(--serif);font-size:22px;font-style:italic;letter-spacing:-.02em;}
   .fact span{font-size:11px;opacity:.8;letter-spacing:.02em;}
 
   /* ── 2. オファー ── */
@@ -110,10 +114,10 @@
   }
   .offer .ico svg{width:21px;height:21px;display:block;}
   .offer h3{font-size:16px;margin-bottom:4px;letter-spacing:-.02em;}
-  .offer p{font-size:13.5px;color:var(--gray);line-height:1.75;}
+  .offer p{font-size:13.5px;color:var(--mid);line-height:1.75;}
   .offer .no{
-    flex:0 0 auto;font-size:11px;font-weight:700;color:#b8c7c4;
-    letter-spacing:.08em;padding-top:11px;
+    flex:0 0 auto;font-family:var(--serif);font-size:13px;font-weight:700;
+    font-style:italic;color:#b8c7c4;letter-spacing:.02em;padding-top:10px;
   }
   .more{
     margin-top:22px;background:var(--teal-l);border-radius:16px;
@@ -135,7 +139,7 @@
   .step .num{
     flex:0 0 32px;height:32px;border-radius:50%;
     background:#fff;border:2px solid var(--teal);color:var(--teal-d);
-    font-size:13px;font-weight:700;
+    font-family:var(--serif);font-size:15px;font-weight:700;font-style:italic;
     display:flex;align-items:center;justify-content:center;
     position:relative;z-index:1;
   }
@@ -179,8 +183,19 @@
     display:block;text-decoration:none;
     border:1px solid var(--hair);border-radius:18px;
     padding:18px 18px 16px;background:#fff;
-    position:relative;
+    position:relative;overflow:hidden;
+    transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;
   }
+  .pick-card::before{
+    content:"";position:absolute;top:0;left:0;right:0;height:3px;
+    background:var(--teal);opacity:0;transition:opacity .18s ease;
+  }
+  .pick-card.primary::before{background:var(--coral);opacity:1;}
+  @media (hover:hover){
+    .pick-card:hover{transform:translateY(-2px);border-color:#cfdedb;box-shadow:0 12px 26px rgba(11,48,44,.09);}
+    .pick-card:hover::before{opacity:1;}
+  }
+  .pick-card:active{transform:translateY(0);}
   .pick-card.primary{
     border-color:rgba(255,122,89,.45);
     background:linear-gradient(180deg,#fff9f7 0%,#fff 100%);
@@ -195,7 +210,7 @@
   }
   .pick-card.primary .pick-head .tag{background:#ffe6dd;color:var(--coral-d);}
   .pick-card h3{font-size:17px;}
-  .pick-card p{font-size:13.5px;color:var(--gray);line-height:1.75;margin-bottom:14px;}
+  .pick-card p{font-size:13.5px;color:var(--mid);line-height:1.75;margin-bottom:14px;}
   .btn{
     display:flex;align-items:center;justify-content:center;gap:7px;
     width:100%;border:none;border-radius:12px;
@@ -238,6 +253,15 @@
   .msg.ng{background:#fff4f0;color:#a8492e;border:1px solid #f5cfc2;}
   .msg.show{display:block;}
 
+  /* ── 極端に狭い端末（〜340px）── */
+  @media (max-width:340px){
+    section{padding:44px 18px;}
+    .hero{padding:34px 18px 48px;}
+    .hero h1{font-size:23px;}
+    .hero h1 .big{font-size:28px;}
+    .sec-title{font-size:21px;}
+  }
+
   /* ── フッター ── */
   footer{
     background:#0b302c;color:#a9c6c1;padding:30px 22px 38px;
@@ -258,7 +282,7 @@
     <h1>あなたの会社の<br><span class="mk">「これ」</span>、<span class="big">5時間</span>ぶん、<br>無料でやります。</h1>
     <p class="lead">AIに詳しいスタッフが実際に手を動かして、<br>最初の成果物まで一緒に作ります。</p>
     <div class="facts">
-      <div class="fact"><b>0円</b><span>費用はかかりません</span></div>
+      <div class="fact"><b><span class="n">0</span>円</b><span>費用はかかりません</span></div>
       <div class="fact"><b>知識ゼロOK</b><span>むずかしい話は不要</span></div>
     </div>
   </section>
