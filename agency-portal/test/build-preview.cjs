@@ -141,6 +141,11 @@ const stub = `<script>
     return next;
   };
   window.__bump = function(){ window.__added = true; window.__stamp = 'CHANGED'; };
+  // 件数が変わらない変更（弊社がステータスだけ直した）を再現する
+  window.__setStatus = function(name, st){
+    window.__BOOT.referrals.forEach(function(r){ if (r.name === name) r.status = st; });
+    window.__stamp = 'STATUS-' + st;
+  };
 })();
 </script>`;
 
