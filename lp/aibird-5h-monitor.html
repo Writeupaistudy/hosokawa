@@ -10,13 +10,14 @@
   :root{
     --teal:#1f9d8f;
     --teal-d:#0f6f66;
-    --teal-l:#e8f5f3;
+    --teal-dd:#0b4f49;
+    --teal-l:#eaf5f3;
     --coral:#ff7a59;
-    --line:#06c755;
-    --ink:#2c3a38;
-    --gray:#6b7a78;
-    --line-gray:#e6ecea;
-    --bg:#f6f9f8;
+    --coral-d:#e35c3c;
+    --ink:#18302d;
+    --gray:#69807c;
+    --hair:#e4ecea;
+    --bg:#eef2f1;
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
@@ -25,246 +26,225 @@
     color:var(--ink);
     font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic",Meiryo,sans-serif;
     font-size:16px;
-    line-height:1.85;
+    line-height:1.9;
+    letter-spacing:.01em;
     -webkit-text-size-adjust:100%;
+    -webkit-font-smoothing:antialiased;
   }
-  .wrap{max-width:600px;margin:0 auto;background:#fff;}
-  section{padding:36px 20px;}
-  h1,h2,h3{margin:0;line-height:1.5;font-weight:700;}
+  .wrap{max-width:600px;margin:0 auto;background:#fff;overflow:hidden;}
+  section{padding:52px 22px;}
+  h1,h2,h3{margin:0;line-height:1.55;font-weight:700;letter-spacing:-.01em;}
   p{margin:0;}
+  a{color:inherit;}
 
-  /* ---------- ヒーロー ---------- */
+  /* ── 共通：セクション見出し ── */
+  .eyebrow{
+    display:flex;align-items:center;gap:9px;
+    font-size:11px;font-weight:700;letter-spacing:.18em;
+    color:var(--teal);text-transform:uppercase;margin-bottom:12px;
+  }
+  .eyebrow::before{content:"";width:18px;height:2px;background:var(--coral);border-radius:2px;}
+  .sec-title{font-size:23px;margin-bottom:10px;}
+  .sec-sub{font-size:14px;color:var(--gray);margin-bottom:26px;line-height:1.85;}
+
+  /* ── 1. ヒーロー ── */
   .hero{
-    background:linear-gradient(160deg,var(--teal) 0%,var(--teal-d) 100%);
+    position:relative;
+    background:
+      radial-gradient(120% 90% at 12% 0%, #2bb3a3 0%, rgba(43,179,163,0) 58%),
+      linear-gradient(158deg,#1c9c8e 0%,#0d6a62 62%,#0b4f49 100%);
     color:#fff;
-    padding:34px 20px 40px;
-    text-align:center;
+    padding:38px 22px 56px;
+    overflow:hidden;
   }
+  .hero::after{ /* 大きな 5h のウォーターマーク */
+    content:"5h";
+    position:absolute;right:-14px;bottom:-46px;
+    font-size:170px;font-weight:800;font-style:italic;
+    letter-spacing:-.06em;line-height:1;
+    color:rgba(255,255,255,.07);
+    pointer-events:none;
+  }
+  .hero > *{position:relative;z-index:1;}
+  .brand{
+    display:flex;align-items:center;gap:9px;
+    font-size:12px;letter-spacing:.18em;font-weight:700;opacity:.9;margin-bottom:26px;
+  }
+  .brand .dot{width:7px;height:7px;border-radius:50%;background:var(--coral);}
   .badge{
-    display:inline-block;
-    background:var(--coral);
-    color:#fff;
-    font-size:13px;
-    font-weight:700;
-    letter-spacing:.02em;
-    padding:6px 14px;
-    border-radius:999px;
-    margin-bottom:18px;
+    display:inline-block;background:var(--coral);color:#fff;
+    font-size:12.5px;font-weight:700;letter-spacing:.02em;
+    padding:6px 14px;border-radius:6px;margin-bottom:20px;
+    box-shadow:0 6px 18px rgba(0,0,0,.16);
   }
-  .hero h1{
-    font-size:27px;
-    letter-spacing:-.01em;
-    margin-bottom:16px;
+  .hero h1{font-size:30px;line-height:1.5;margin-bottom:20px;letter-spacing:-.02em;}
+  .hero h1 .mk{
+    background:linear-gradient(transparent 62%, rgba(255,122,89,.85) 62%);
+    padding:0 2px;
   }
-  .hero h1 .em{
-    display:inline-block;
-    background:rgba(255,255,255,.16);
-    border-radius:8px;
-    padding:0 6px;
+  .hero h1 .big{
+    font-size:38px;font-style:italic;letter-spacing:-.03em;
+    padding:0 2px;
   }
-  .hero .lead{font-size:15px;opacity:.95;margin-bottom:20px;}
-  .hero-note{
-    display:inline-flex;
-    gap:10px;
-    flex-wrap:wrap;
-    justify-content:center;
+  .hero .lead{font-size:14.5px;line-height:1.9;opacity:.92;margin-bottom:24px;}
+  .facts{display:flex;gap:10px;}
+  .fact{
+    flex:1;
+    background:rgba(255,255,255,.12);
+    border:1px solid rgba(255,255,255,.18);
+    border-radius:12px;padding:11px 6px;text-align:center;
   }
-  .chip{
-    background:rgba(255,255,255,.18);
-    border-radius:999px;
-    font-size:13px;
-    font-weight:700;
-    padding:6px 14px;
-  }
-  .hero-brand{
-    font-size:12px;
-    letter-spacing:.14em;
-    opacity:.85;
-    margin-bottom:14px;
-  }
+  .fact b{display:block;font-size:15px;line-height:1.4;}
+  .fact span{font-size:11px;opacity:.8;letter-spacing:.02em;}
 
-  /* ---------- 見出し ---------- */
-  .sec-title{font-size:21px;margin-bottom:8px;}
-  .sec-sub{font-size:14px;color:var(--gray);margin-bottom:22px;}
+  /* ── 2. オファー ── */
+  .offers{border-top:1px solid var(--hair);}
+  .offer{
+    display:flex;gap:14px;align-items:flex-start;
+    padding:18px 2px;border-bottom:1px solid var(--hair);
+  }
+  .offer .ico{
+    flex:0 0 40px;height:40px;border-radius:11px;
+    background:var(--teal-l);color:var(--teal-d);
+    display:flex;align-items:center;justify-content:center;
+  }
+  .offer .ico svg{width:21px;height:21px;display:block;}
+  .offer h3{font-size:16px;margin-bottom:4px;letter-spacing:-.02em;}
+  .offer p{font-size:13.5px;color:var(--gray);line-height:1.75;}
+  .offer .no{
+    flex:0 0 auto;font-size:11px;font-weight:700;color:#b8c7c4;
+    letter-spacing:.08em;padding-top:11px;
+  }
+  .more{
+    margin-top:22px;background:var(--teal-l);border-radius:16px;
+    padding:18px 20px;
+  }
+  .more b{display:block;font-size:15px;color:var(--teal-dd);margin-bottom:2px;}
+  .more span{font-size:13.5px;color:var(--gray);line-height:1.8;}
 
-  /* ---------- オファーカード ---------- */
-  .cards{display:grid;gap:12px;}
-  .card{
-    background:#fff;
-    border:1px solid var(--line-gray);
-    border-radius:16px;
-    padding:16px 16px 16px 15px;
-    display:flex;
-    gap:13px;
-    align-items:flex-start;
-    box-shadow:0 1px 3px rgba(15,111,102,.05);
+  /* ── 3. ステップ ── */
+  .flow{background:#fafcfb;}
+  .steps{position:relative;padding-left:6px;}
+  .step{display:flex;gap:16px;padding-bottom:24px;position:relative;}
+  .step:last-child{padding-bottom:0;}
+  .step::before{ /* 縦のライン */
+    content:"";position:absolute;left:15px;top:34px;bottom:0;
+    width:2px;background:linear-gradient(var(--hair),rgba(228,236,234,0));
   }
-  .card .ico{
-    flex:0 0 42px;
-    height:42px;
-    border-radius:12px;
-    background:var(--teal-l);
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    font-size:20px;
-    line-height:1;
-  }
-  .card h3{font-size:16px;margin-bottom:3px;}
-  .card p{font-size:13.5px;color:var(--gray);line-height:1.7;}
-  .card-more{
-    margin-top:14px;
-    background:var(--teal-l);
-    border-radius:14px;
-    padding:14px 16px;
-    font-size:14px;
-    color:var(--teal-d);
-    font-weight:700;
-    line-height:1.7;
-  }
-  .card-more span{display:block;font-weight:400;color:var(--gray);font-size:13px;margin-top:2px;}
-
-  /* ---------- ステップ ---------- */
-  .steps{display:grid;gap:12px;counter-reset:step;}
-  .step{
-    display:flex;
-    gap:13px;
-    align-items:flex-start;
-    background:#fff;
-    border:1px solid var(--line-gray);
-    border-radius:16px;
-    padding:15px 16px;
-  }
+  .step:last-child::before{display:none;}
   .step .num{
-    flex:0 0 30px;
-    height:30px;
-    border-radius:50%;
-    background:var(--teal);
-    color:#fff;
-    font-weight:700;
-    font-size:14px;
-    display:flex;
-    align-items:center;
-    justify-content:center;
+    flex:0 0 32px;height:32px;border-radius:50%;
+    background:#fff;border:2px solid var(--teal);color:var(--teal-d);
+    font-size:13px;font-weight:700;
+    display:flex;align-items:center;justify-content:center;
+    position:relative;z-index:1;
   }
-  .step h3{font-size:15.5px;margin-bottom:2px;}
-  .step p{font-size:13.5px;color:var(--gray);line-height:1.7;}
+  .step h3{font-size:16px;margin-bottom:2px;}
+  .step p{font-size:13.5px;color:var(--gray);line-height:1.75;}
+  .step .tag{
+    display:inline-block;margin-top:6px;font-size:11.5px;font-weight:700;
+    color:var(--teal-d);background:var(--teal-l);border-radius:5px;padding:2px 8px;
+  }
 
-  /* ---------- 安心 ---------- */
-  .safe{background:var(--teal-l);}
-  .safe-list{display:grid;gap:10px;}
+  /* ── 4. 安心（ダーク） ── */
+  .safe{background:var(--teal-dd);color:#fff;}
+  .safe .eyebrow{color:#7fd8cc;}
+  .safe .sec-sub{color:rgba(255,255,255,.7);}
   .safe-item{
-    background:#fff;
-    border-radius:14px;
-    padding:14px 16px;
+    display:flex;gap:13px;align-items:flex-start;
+    padding:16px 0;border-top:1px solid rgba(255,255,255,.13);
   }
-  .safe-item h3{font-size:15.5px;margin-bottom:2px;}
-  .safe-item p{font-size:13.5px;color:var(--gray);line-height:1.7;}
-  .safe-item .mark{color:var(--teal);font-weight:700;margin-right:6px;}
+  .safe-item:last-child{border-bottom:1px solid rgba(255,255,255,.13);}
+  .safe-item .chk{
+    flex:0 0 22px;height:22px;border-radius:50%;
+    background:rgba(255,255,255,.14);color:#8fe3d6;
+    display:flex;align-items:center;justify-content:center;margin-top:4px;
+  }
+  .safe-item .chk svg{width:12px;height:12px;}
+  .safe-item h3{font-size:16px;margin-bottom:2px;}
+  .safe-item p{font-size:13.5px;color:rgba(255,255,255,.72);line-height:1.75;}
 
-  /* ---------- お問い合わせフォーム ---------- */
-  .form-sec{padding-top:34px;}
-  .notice{
-    border:1px dashed var(--coral);
-    background:#fff6f3;
-    border-radius:14px;
-    padding:14px 16px;
-    font-size:13.5px;
-    color:#b4482c;
-    line-height:1.7;
-    margin-bottom:22px;
+  /* ── 5. 二択CTA ── */
+  .pick{background:#fff;}
+  .limit{
+    display:flex;gap:11px;align-items:flex-start;
+    border:1px solid #ffd9cd;background:#fff7f4;border-radius:14px;
+    padding:14px 16px;margin-bottom:24px;
   }
-  .notice b{color:#8f3520;}
-  form{display:grid;gap:14px;}
-  label{display:block;font-size:13.5px;font-weight:700;margin-bottom:5px;}
-  .req{
-    font-size:11px;
-    color:#fff;
-    background:var(--coral);
-    border-radius:4px;
-    padding:1px 6px;
-    margin-left:6px;
-    font-weight:700;
-    vertical-align:1px;
+  .limit svg{flex:0 0 18px;width:18px;height:18px;color:var(--coral-d);margin-top:5px;}
+  .limit p{font-size:13px;color:#a8492e;line-height:1.8;}
+  .limit b{color:#8c3620;}
+  .picks{display:grid;gap:12px;}
+  .pick-card{
+    display:block;text-decoration:none;
+    border:1px solid var(--hair);border-radius:18px;
+    padding:18px 18px 16px;background:#fff;
+    position:relative;
   }
-  .opt{
-    font-size:11px;
-    color:var(--gray);
-    background:#eef2f1;
-    border-radius:4px;
-    padding:1px 6px;
-    margin-left:6px;
-    font-weight:700;
-    vertical-align:1px;
+  .pick-card.primary{
+    border-color:rgba(255,122,89,.45);
+    background:linear-gradient(180deg,#fff9f7 0%,#fff 100%);
   }
+  .pick-head{margin-bottom:8px;}
+  .pick-head .tag{display:inline-block;margin-bottom:6px;}
+  .pick-head h3{letter-spacing:-.02em;}
+  .pick-head .tag{
+    font-size:10.5px;font-weight:700;letter-spacing:.06em;
+    border-radius:5px;padding:2px 7px;
+    background:var(--teal-l);color:var(--teal-d);
+  }
+  .pick-card.primary .pick-head .tag{background:#ffe6dd;color:var(--coral-d);}
+  .pick-card h3{font-size:17px;}
+  .pick-card p{font-size:13.5px;color:var(--gray);line-height:1.75;margin-bottom:14px;}
+  .btn{
+    display:flex;align-items:center;justify-content:center;gap:7px;
+    width:100%;border:none;border-radius:12px;
+    font-family:inherit;font-size:16px;font-weight:700;
+    padding:15px;text-align:center;text-decoration:none;cursor:pointer;line-height:1.5;
+  }
+  .btn svg{width:16px;height:16px;}
+  .btn-main{background:var(--coral);color:#fff;box-shadow:0 4px 14px rgba(255,122,89,.35);}
+  .btn-main:active{transform:translateY(1px);}
+  .btn-sub{background:#fff;color:var(--teal-d);border:1.5px solid var(--teal);}
+  .btn-sub:active{transform:translateY(1px);}
+  .btn[disabled]{opacity:.6;cursor:default;box-shadow:none;}
+  .pick-note{font-size:12.5px;color:var(--gray);text-align:center;margin-top:18px;line-height:1.8;}
+
+  /* ── 6. フォーム ── */
+  .form-sec{background:#fafcfb;border-top:1px solid var(--hair);}
+  form{display:grid;gap:16px;}
+  label{display:block;font-size:13px;font-weight:700;margin-bottom:6px;letter-spacing:.02em;}
+  .req,.opt{
+    font-size:10.5px;border-radius:4px;padding:1px 6px;margin-left:7px;
+    font-weight:700;vertical-align:1.5px;letter-spacing:.04em;
+  }
+  .req{color:#fff;background:var(--coral);}
+  .opt{color:var(--gray);background:#eaefee;}
   input[type=text],input[type=email],input[type=tel],select,textarea{
-    width:100%;
-    font-family:inherit;
-    font-size:16px;
-    color:var(--ink);
-    background:#fff;
-    border:1px solid #d5dedc;
-    border-radius:12px;
-    padding:12px 13px;
-    line-height:1.6;
+    width:100%;font-family:inherit;font-size:16px;color:var(--ink);
+    background:#fff;border:1px solid #d9e3e1;border-radius:12px;
+    padding:13px;line-height:1.6;
   }
-  textarea{min-height:96px;resize:vertical;}
+  textarea{min-height:104px;resize:vertical;}
   input:focus,select:focus,textarea:focus{
-    outline:none;
-    border-color:var(--teal);
+    outline:none;border-color:var(--teal);
     box-shadow:0 0 0 3px rgba(31,157,143,.14);
   }
+  ::placeholder{color:#a9b8b5;}
   .hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;}
-  .btn{
-    display:block;
-    width:100%;
-    border:none;
-    border-radius:14px;
-    font-family:inherit;
-    font-size:17px;
-    font-weight:700;
-    color:#fff;
-    padding:16px;
-    text-align:center;
-    text-decoration:none;
-    cursor:pointer;
-    line-height:1.5;
-  }
-  .btn-main{background:var(--coral);box-shadow:0 4px 0 #e3603f;}
-  .btn-main:active{transform:translateY(2px);box-shadow:0 2px 0 #e3603f;}
-  .btn[disabled]{opacity:.6;cursor:default;}
-  .form-note{font-size:12.5px;color:var(--gray);line-height:1.7;text-align:center;}
-  .form-alt{font-size:13px;color:var(--gray);text-align:center;line-height:1.8;}
-  .form-alt a{color:var(--teal-d);}
-  .msg{
-    border-radius:14px;
-    padding:16px;
-    font-size:14px;
-    line-height:1.8;
-    display:none;
-  }
-  .msg.ok{background:var(--teal-l);color:var(--teal-d);border:1px solid #bfe3de;}
-  .msg.ng{background:#fff3f0;color:#b4482c;border:1px solid #f3cfc4;}
+  .form-note{font-size:12.5px;color:var(--gray);line-height:1.8;text-align:center;}
+  .msg{border-radius:16px;padding:18px;font-size:14px;line-height:1.85;display:none;}
+  .msg.ok{background:var(--teal-l);color:var(--teal-dd);border:1px solid #c7e5e0;}
+  .msg.ng{background:#fff4f0;color:#a8492e;border:1px solid #f5cfc2;}
   .msg.show{display:block;}
 
-  /* ---------- CTA（公式LINE） ---------- */
-  .cta{background:var(--teal-l);text-align:center;}
-  .cta h2{font-size:20px;margin-bottom:10px;}
-  .cta p{font-size:14px;color:var(--gray);margin-bottom:18px;line-height:1.8;}
-  .btn-line{background:var(--line);box-shadow:0 4px 0 #05a144;}
-  .btn-line:active{transform:translateY(2px);box-shadow:0 2px 0 #05a144;}
-  .cta small{display:block;font-size:12.5px;color:var(--gray);margin-top:12px;}
-
-  /* ---------- フッター ---------- */
+  /* ── フッター ── */
   footer{
-    background:#12332f;
-    color:#cfe0dd;
-    padding:26px 20px 34px;
-    text-align:center;
-    font-size:12.5px;
-    line-height:1.9;
+    background:#0b302c;color:#a9c6c1;padding:30px 22px 38px;
+    text-align:center;font-size:12.5px;line-height:2;
   }
-  footer .fname{color:#fff;font-weight:700;font-size:14px;display:block;margin-bottom:6px;}
+  footer .fname{color:#fff;font-weight:700;font-size:14px;display:block;margin-bottom:8px;letter-spacing:.02em;}
+  footer .rule{width:28px;height:2px;background:var(--coral);border-radius:2px;margin:0 auto 16px;}
 </style>
 </head>
 <body>
@@ -272,75 +252,83 @@
 
   <!-- ============ 1. ヒーロー ============ -->
   <section class="hero">
-    <p class="hero-brand">AI BIRD ｜ AIの家庭教師</p>
+    <p class="brand"><span class="dot"></span>AI BIRD ｜ AIの家庭教師</p>
     <!-- 先着◯社と明記する場合はここ（例：「今だけ・先着100社でご案内中」） -->
     <span class="badge">今だけ・先着でご案内中</span>
-    <h1>あなたの会社の<br>「<span class="em">これ</span>」、5時間ぶん、<br>無料でやります。</h1>
+    <h1>あなたの会社の<br><span class="mk">「これ」</span>、<span class="big">5時間</span>ぶん、<br>無料でやります。</h1>
     <p class="lead">AIに詳しいスタッフが実際に手を動かして、<br>最初の成果物まで一緒に作ります。</p>
-    <div class="hero-note">
-      <span class="chip">費用ゼロ</span>
-      <span class="chip">専門知識も不要</span>
+    <div class="facts">
+      <div class="fact"><b>0円</b><span>費用はかかりません</span></div>
+      <div class="fact"><b>知識ゼロOK</b><span>むずかしい話は不要</span></div>
     </div>
   </section>
 
   <!-- ============ 2. オファー一覧（主役） ============ -->
   <section>
-    <h2 class="sec-title">たとえば、こんなことができます</h2>
-    <p class="sec-sub">気になるものを1つ選ぶだけでOK。迷ったら「相談」でも大丈夫です。</p>
+    <p class="eyebrow">Offer</p>
+    <h2 class="sec-title">たとえば、<br>こんなことができます</h2>
+    <p class="sec-sub">気になるものを1つ選ぶだけでOK。<br>迷ったら「相談」でも大丈夫です。</p>
 
-    <div class="cards">
-      <div class="card">
-        <div class="ico">🔁</div>
+    <div class="offers">
+      <div class="offer">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0 1 13.7-5.6L20 8"/><path d="M20 4v4h-4"/><path d="M20 12a8 8 0 0 1-13.7 5.6L4 16"/><path d="M4 20v-4h4"/></svg></div>
         <div>
           <h3>毎日の面倒な手作業を、1つ自動化</h3>
           <p>集計・転記・入力など、繰り返している作業をひとつ選んで自動化します。</p>
         </div>
+        <div class="no">01</div>
       </div>
-      <div class="card">
-        <div class="ico">📄</div>
+      <div class="offer">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6"/><path d="M9 17h4"/></svg></div>
         <div>
           <h3>紙・PDFの書類を、AIでデータに</h3>
           <p>請求書・発注書・通帳などを読み取って、そのまま使える形にします。</p>
         </div>
+        <div class="no">02</div>
       </div>
-      <div class="card">
-        <div class="ico">🎨</div>
+      <div class="offer">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.6"/><path d="M21 15l-5-5-9 9"/></svg></div>
         <div>
           <h3>SNS投稿やチラシを、社内で作れる形に</h3>
           <p>毎回外注しなくても、社内でさっと作れる手順とひな形を用意します。</p>
         </div>
+        <div class="no">03</div>
       </div>
-      <div class="card">
-        <div class="ico">📍</div>
+      <div class="offer">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-5.4 7-11a7 7 0 1 0-14 0c0 5.6 7 11 7 11z"/><path d="M12 7.4l1.1 2.2 2.4.3-1.8 1.7.5 2.4-2.2-1.2-2.2 1.2.5-2.4-1.8-1.7 2.4-.3z"/></svg></div>
         <div>
           <h3>Googleの口コミ・店舗情報を整える</h3>
           <p>口コミへの返信や、定期投稿のまわし方を一緒に整えます。</p>
         </div>
+        <div class="no">04</div>
       </div>
-      <div class="card">
-        <div class="ico">💬</div>
+      <div class="offer">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.2c0 4-4 7.2-9 7.2-.9 0-1.8-.1-2.6-.3L4 20l1.3-3.4C3.9 15.2 3 13.3 3 11.2 3 7.2 7 4 12 4s9 3.2 9 7.2z"/></svg></div>
         <div>
           <h3>公式LINEを、届いて動く形で立ち上げ</h3>
-          <p>friend登録のあとに何を送るか。最初の一連の流れまで作ります。</p>
+          <p>友だち登録のあとに何を送るか。最初の一連の流れまで作ります。</p>
         </div>
+        <div class="no">05</div>
       </div>
-      <div class="card">
-        <div class="ico">🧭</div>
+      <div class="offer">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg></div>
         <div>
           <h3>「うちはAIで何ができる？」を一緒に洗い出す</h3>
           <p>やることが決まっていなくてもOK。使えそうな場所から探します。</p>
         </div>
+        <div class="no">06</div>
       </div>
     </div>
 
-    <div class="card-more">
-      ここにないことでも大丈夫です。
+    <div class="more">
+      <b>ここにないことでも大丈夫です。</b>
       <span>やりたいことを、そのまま相談してください。</span>
     </div>
   </section>
 
   <!-- ============ 3. 使い方（3ステップ） ============ -->
-  <section style="background:#fbfdfc;">
+  <section class="flow">
+    <p class="eyebrow">Flow</p>
     <h2 class="sec-title">使い方は、3ステップだけ</h2>
     <p class="sec-sub">お客様の作業は、ほとんどありません。</p>
     <div class="steps">
@@ -349,6 +337,7 @@
         <div>
           <h3>気軽に問い合わせ</h3>
           <p>下のフォームから、ひとことで大丈夫です。</p>
+          <span class="tag">所要 30秒</span>
         </div>
       </div>
       <div class="step">
@@ -356,6 +345,7 @@
         <div>
           <h3>やることを一緒に決める</h3>
           <p>お話をうかがって、5時間でできることを一緒に選びます。</p>
+          <span class="tag">オンラインで30分</span>
         </div>
       </div>
       <div class="step">
@@ -363,6 +353,7 @@
         <div>
           <h3>5時間で作って、お渡し</h3>
           <p>こちらで手を動かして、そのまま使える形にしてお渡しします。</p>
+          <span class="tag">こちらの作業です</span>
         </div>
       </div>
     </div>
@@ -370,34 +361,81 @@
 
   <!-- ============ 4. 安心の3点 ============ -->
   <section class="safe">
+    <p class="eyebrow">Promise</p>
     <h2 class="sec-title">はじめる前に、3つだけ</h2>
     <p class="sec-sub">気になるところだと思うので、先にお伝えします。</p>
-    <div class="safe-list">
+    <div>
       <div class="safe-item">
-        <h3><span class="mark">✓</span>費用はかかりません</h3>
-        <p>モニターでのご案内なので、この5時間ぶんの費用はいただきません。</p>
+        <div class="chk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+        <div>
+          <h3>費用はかかりません</h3>
+          <p>モニターでのご案内なので、この5時間ぶんの費用はいただきません。</p>
+        </div>
       </div>
       <div class="safe-item">
-        <h3><span class="mark">✓</span>専門知識は要りません</h3>
-        <p>AIを触ったことがなくて大丈夫です。むずかしい話はこちらで引き受けます。</p>
+        <div class="chk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+        <div>
+          <h3>専門知識は要りません</h3>
+          <p>AIを触ったことがなくて大丈夫です。むずかしい話はこちらで引き受けます。</p>
+        </div>
       </div>
       <div class="safe-item">
-        <h3><span class="mark">✓</span>売り込みはしません</h3>
-        <p>やってみて良かったら、そのときに続きを考えていただければ十分です。</p>
+        <div class="chk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+        <div>
+          <h3>売り込みはしません</h3>
+          <p>やってみて良かったら、そのときに続きを考えていただければ十分です。</p>
+        </div>
       </div>
     </div>
   </section>
 
-  <!-- ============ 5. お問い合わせフォーム（メインの受け口） ============ -->
-  <section class="form-sec" id="contact">
-    <h2 class="sec-title">まずは、お問い合わせから</h2>
-    <p class="sec-sub">入力は30秒ほど。相談だけでもかまいません。</p>
+  <!-- ============ 5. CTA（お問い合わせ or 予約の二択） ============ -->
+  <section class="pick">
+    <p class="eyebrow">Contact</p>
+    <h2 class="sec-title">どちらか、選ぶだけ。</h2>
+    <p class="sec-sub">話を聞いてみたいだけ、でも大丈夫です。</p>
 
     <!-- 先着◯社と明記する場合はここ（例：「先着100社さまで締め切ります」に差し替え） -->
-    <div class="notice">
-      <b>枠に限りがあり、先着順でのご案内です。</b><br>
-      混み合う場合は順番待ちのご案内になることがあります。
+    <div class="limit">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      <p><b>枠に限りがあり、先着順でのご案内です。</b><br>混み合う場合は順番待ちのご案内になることがあります。</p>
     </div>
+
+    <div class="picks">
+      <a href="#form" class="pick-card primary">
+        <div class="pick-head">
+          <span class="tag">まずは軽く</span>
+          <h3>お問い合わせフォーム</h3>
+        </div>
+        <p>メールで受け取ります。ひとことだけでOK。日程を決める必要はありません。</p>
+        <span class="btn btn-main">
+          フォームに書いて送る
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M19 12l-7 7-7-7"/></svg>
+        </span>
+      </a>
+
+      <!-- ↓ ここに予約（日程調整）フォームのURLを入れる。現在は仮で申込みフォームを設定しています -->
+      <a href="https://form.run/@writeup-2mQ35SCXFMMAN3BIBKah" target="_blank" rel="noopener" class="pick-card">
+        <div class="pick-head">
+          <span class="tag">話が早い</span>
+          <h3>予約フォーム</h3>
+        </div>
+        <p>先に日程だけ決めます。オンラインで30分、聞くだけの回でも大丈夫です。</p>
+        <span class="btn btn-sub">
+          日程を予約する
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
+        </span>
+      </a>
+    </div>
+
+    <p class="pick-note">どちらを選んでも、内容は同じです。<br>書くのが面倒なら、予約からどうぞ。</p>
+  </section>
+
+  <!-- ============ 6. お問い合わせフォーム本体 ============ -->
+  <section class="form-sec" id="form">
+    <p class="eyebrow">Form</p>
+    <h2 class="sec-title">お問い合わせ</h2>
+    <p class="sec-sub">入力は30秒ほど。必須はお名前とメールだけです。</p>
 
     <form id="contactForm" novalidate>
       <div>
@@ -453,31 +491,14 @@
     </div>
     <div class="msg ng" id="msgNg" role="alert">
       <b>うまく送信できませんでした。</b><br>
-      お手数ですが、時間をおいて再度お試しいただくか、下の公式LINEからご連絡ください。
+      お手数ですが、時間をおいて再度お試しいただくか、
+      <a href="https://form.run/@writeup-2mQ35SCXFMMAN3BIBKah" target="_blank" rel="noopener">予約フォーム</a>からご連絡ください。
     </div>
-
-    <p class="form-alt" style="margin-top:16px;">
-      うまく送れないときは<br>
-      <a href="https://form.run/@writeup-2mQ35SCXFMMAN3BIBKah" target="_blank" rel="noopener">こちらのフォーム</a>からでも受け付けています。
-    </p>
-  </section>
-
-  <!-- ============ 6. CTA（公式LINE） ============ -->
-  <section class="cta">
-    <!-- 先着◯社と明記する場合はここ（例：「先着100社さまでご案内中」） -->
-    <h2>LINEからでも、大丈夫です。</h2>
-    <p>
-      枠に限りがあり先着順のため、<br>
-      混み合う場合は順番待ちのご案内になります。<br>
-      <b style="color:var(--teal-d);">まず話を聞いてみたいだけでもOK</b>です。
-    </p>
-    <!-- ↓ ここに公式LINEのURLを入れる（例: https://lin.ee/xxxxxxx）※現在は仮リンク -->
-    <a href="#" class="btn btn-line">公式LINEで気軽に聞いてみる</a>
-    <small>友だち追加してひとこと送るだけ。<br>そのまま何もしなくても大丈夫です。</small>
   </section>
 
   <!-- ============ フッター ============ -->
   <footer>
+    <div class="rule"></div>
     <span class="fname">AIバード ｜ 株式会社ライトアップ</span>
     本ページはモニター向けのご案内です。<br>
     内容・提供枠は予告なく変更になる場合があります。
