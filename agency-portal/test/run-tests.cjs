@@ -292,6 +292,74 @@ head('23. 列を増やしても既存データがズレない');
   ok(findAgencyById_(a1.id).rate !== '', '代理店の基本マージン率も保たれる');
 }
 
+head('24. 開き直しても内容が保持されるか（ページを閉じて開き直す想定）');
+{
+  // 「ページを開く」＝ doGet が agencyBoard_ をゼロから組み立てる、という動作をそのまま呼ぶ
+  const openPage = (agencyId) => agencyBoard_(findAgencyById_(agencyId));
+  const findIn = (board, id) => board.referrals.filter(r => r.id === id)[0];
+
+  // (1) 代理店が入力 → 閉じる → 開き直す
+  const s1 = createReferral_(findAgencyById_(a1.id),
+    { kind:'顧客紹介', company:'保持テスト株式会社', name:'保持 太郎', email:'hoji@example.jp',
+      phone:'090-0000-1111', detail:'ページを閉じて開き直しても残るか' }, 'アルファ株式会社');
+  const open1 = openPage(a1.id);
+  ok(findIn(open1, s1.id).name === '保持 太郎', '登録直後に開き直しても残っている');
+
+  const open2 = openPage(a1.id);   // 何度開いても
+  ok(findIn(open2, s1.id).detail === 'ページを閉じて開き直しても残るか', '2回目に開いても中身は同じ');
+  ok(open1.referrals.length === open2.referrals.length, '開くたびに件数が増えたり減ったりしない');
+
+  // (2) 代理店が入力しないので、弊社が代わりに情報を足す → 代理店のページに出る
+  apiAdminUpdateReferral(adminToken, s1.id, {
+    company:'保持テスト株式会社（正式名称）', phone:'03-9999-0000',
+    detail:'弊社側で追記した詳細', status:'アプローチ中', memo:'これは社内メモ'
+  });
+  const open3 = openPage(a1.id);
+  const seen = findIn(open3, s1.id);
+  ok(seen.company === '保持テスト株式会社（正式名称）', '弊社が直した会社名が代理店のページに出る');
+  ok(seen.detail === '弊社側で追記した詳細', '弊社が追記した詳細も出る');
+  ok(seen.status === 'アプローチ中', '弊社が変えたステータスも出る');
+  ok(seen.memo === undefined, '社内メモだけは代理店に渡らない');
+
+  // (3) 弊社がスプレッドシートを直接書き換えた場合も反映される
+  {
+    const row = findReferralById_(s1.id)._row;
+    const col = fieldIndex_(REFERRAL_FIELDS, 'name') + 1;
+    sheet_(SHEETS.REFERRAL).getRange(row, col).setValue('保持 太郎（シート直編集）');
+    ok(findIn(openPage(a1.id), s1.id).name === '保持 太郎（シート直編集）',
+       'スプレッドシートを手で直しても、次に開いたときに反映される');
+  }
+
+  // (4) 弊社が代理店の代わりに新規登録 → その代理店のページに現れる
+  apiAdminCreateReferral(adminToken, a1.id,
+    { kind:'顧客紹介', name:'弊社入力 花子', company:'ラムダ商事' });
+  const open4 = openPage(a1.id);
+  const added = open4.referrals.filter(r => r.name === '弊社入力 花子')[0];
+  ok(!!added, '弊社が入力した紹介が、代理店のページに出てくる');
+  ok(added.updatedBy === '弊社', '誰が入れたかも残る');
+
+  // (5) 他社のページには出ない
+  const other = agencyBoard_(findAgencyById_(a2.id));
+  ok(!other.referrals.filter(r => r.name === '弊社入力 花子').length, '別の代理店のページには出ない');
+
+  // (6) 代理店が直したら、弊社側（管理画面）にも即反映
+  apiAgencyUpdateReferral(tok(), s1.id, { email:'kaki-naoshi@example.jp' });
+  const adminSees = adminBoard_(adminToken).referrals.filter(r => r.id === s1.id)[0];
+  ok(adminSees.email === 'kaki-naoshi@example.jp', '代理店の修正が管理画面にも出る');
+  ok(adminSees.memo === 'これは社内メモ', '代理店が触っても社内メモは消えない');
+
+  // (7) URLを再発行しても中身は残る（変わるのはURLだけ）
+  const beforeCount = openPage(a1.id).referrals.length;
+  rotateAgencyToken_(a1.id);
+  ok(openPage(a1.id).referrals.length === beforeCount, 'URLを再発行しても紹介データは残る');
+  ok(findAgencyByToken_(findAgencyById_(a1.id).token).id === a1.id, '新しいURLで同じページが開く');
+
+  // (8) 設定を変えると、次に開いたときに反映される（アプリ側の即時反映）
+  setSetting_('紹介の目標件数', '30');
+  ok(openPage(a1.id).goal === 30, '設定シートの変更が、次に開いたときに反映される');
+  setSetting_('紹介の目標件数', '10');
+}
+
 console.log('\n────────────────────────');
 console.log(pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);
