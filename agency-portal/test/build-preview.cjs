@@ -58,7 +58,7 @@ const agencyBoot = {
     lpUrl:'https://example.com/ai-training?ref=AG-001', lpNote:'8/20に内容を刷新しました。' },
   company:'株式会社ホソカワ', intro:'ご紹介いただける方の情報をこちらに登録してください。LINEに流れず、進捗もこの画面で確認できます。',
   canEditStatus:true, options,
-  goal:10, tossRate:3, aiRewrite:false,
+  goal:10, tossRate:3, aiRewrite:false, autoRefresh:2, stamp:'r6|2026/08/20 12:00:00|1',
   individualUrl:'https://timerex.net/s/hosokawa/ai-briefing',
   briefings:[
     {id:'B-001',startAt:'2026/09/03 15:00',kind:'代理店向け説明会',capacity:'10',url:'https://zoom.us/j/000',note:'毎週木曜開催。60分。',open:'TRUE',booked:'3'},
@@ -94,6 +94,7 @@ const adminBoot = {
     {id:'T-001',order:'10',target:'お客様',channel:'LINE',angle:'現場の困りごとから',title:'手作業がまだ多い会社に',body:'お疲れさまです。{自分}です。\n\n先日お話しされていた…',open:true},
     {id:'T-005',order:'50',target:'代理店候補',channel:'LINE',angle:'一緒に取り扱う',title:'取扱いに誘う（LINE）',body:'お疲れさまです。{自分}です。\n\n最近うちで扱っている…',open:true}
   ],
+  autoRefresh:2, stamp:'r8|2026/08/20 12:00:00|1',
   settings: { goal:10, tossRate:3, individualUrl:'https://timerex.net/s/hosokawa/ai-briefing', aiRewrite:false, uiVersion:'v2' }
 };
 
@@ -114,7 +115,10 @@ const stub = `<script>
     withSuccessHandler: function(f){ ok = f; return api; },
     withFailureHandler: function(f){ ng = f; return api; },
     apiAgencyGenerateCopy: function(){ setTimeout(function(){ if (ok) ok(SAMPLE); }, 400); },
-    apiAgencyRefresh: function(){}, apiAdminRefresh: function(){},
+    apiAgencyPulse: function(){ var f=ok; setTimeout(function(){ if (f) f(window.__stamp); }, 30); },
+    apiAdminPulse:  function(){ var f=ok; setTimeout(function(){ if (f) f(window.__stamp); }, 30); },
+    apiAgencyRefresh: function(){ var f=ok; setTimeout(function(){ if (f) f(window.__nextBoard()); }, 30); },
+    apiAdminRefresh:  function(){ var f=ok; setTimeout(function(){ if (f) f(window.__nextBoard()); }, 30); },
     apiAgencyCreateReferral: function(){}, apiAgencyUpdateReferral: function(){},
     apiAdminCreateReferral: function(){}, apiAdminUpdateReferral: function(){},
     apiAdminSaveAgency: function(){}, apiAdminSaveNotice: function(){},
@@ -122,6 +126,21 @@ const stub = `<script>
     apiAdminRotateAgencyToken: function(){}
   };
   window.google = { script: { run: api } };
+  // プレビュー用：サーバ側で内容が増えた状況を再現する
+  window.__pulls = 0;
+  window.__nextBoard = function(){
+    window.__pulls++;
+    var next = JSON.parse(JSON.stringify(window.__BOOT));
+    if (window.__added){
+      var add = JSON.parse(JSON.stringify(next.referrals[0]));
+      add.id = 'R-NEW-0001'; add.name = '自動更新 太郎'; add.company = 'あとから届いた株式会社';
+      add.createdAt = '2026/08/28 09:00:00'; add.status = '新規';
+      next.referrals = [add].concat(next.referrals);
+    }
+    next.stamp = window.__stamp;
+    return next;
+  };
+  window.__bump = function(){ window.__added = true; window.__stamp = 'CHANGED'; };
 })();
 </script>`;
 
@@ -130,6 +149,7 @@ function build(name, boot){
   html = html.replace("<?!= include('Style'); ?>", styles[name])
              .replace("<?!= include('StyleV2'); ?>", styles[name])
              .replace('<?!= boot ?>', JSON.stringify(boot))
+             .replace('</head>', '<script>window.__BOOT=' + JSON.stringify(boot) + ';window.__stamp=' + JSON.stringify(boot.stamp || '') + ';</script>\n</head>')
              .replace('</head>', viewportMeta + '\n' + stub + '\n</head>');
   fs.writeFileSync(path.join(out, name.toLowerCase() + '.html'), html);
   console.log('→ test/preview/' + name.toLowerCase() + '.html');

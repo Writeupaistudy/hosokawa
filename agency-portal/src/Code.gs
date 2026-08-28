@@ -46,6 +46,14 @@ function renderMessage_(title, message) {
 /* 画面の描画                                                           */
 /* ------------------------------------------------------------------ */
 
+/** 自動更新の間隔（秒）。0 なら自動更新なし。極端な値は安全側に丸める。 */
+function autoRefreshSec_(settings) {
+  var raw = String((settings || {})['自動更新の間隔（秒）'] || '25').trim();
+  var n = parseInt(raw, 10);
+  if (isNaN(n) || n <= 0) return 0;
+  return Math.min(Math.max(n, 10), 600);
+}
+
 /** 使用するUIバージョン。URLの ui= が優先、なければ設定シートの値。 */
 function uiVersion_(param, settings) {
   var v = String(param || '').trim().toLowerCase();
@@ -144,6 +152,8 @@ function agencyBoard_(agency, settings) {
     intro: settings['代理店ページの案内文'] || '',
     canEditStatus: String(settings['代理店によるステータス編集'] || '許可') === '許可',
     goal: Math.max(parseInt(settings['紹介の目標件数'], 10) || 10, 1),
+    autoRefresh: autoRefreshSec_(settings),
+    stamp: boardStamp_(),
     tossRate: normalizeRate_(settings['トスアップ時の紹介元マージン(%)'], 3),
     individualUrl: String(settings['個別日程調整URL'] || '').trim(),
     aiRewrite: claudeEnabled_(settings),
@@ -163,6 +173,8 @@ function adminBoard_(token) {
     company: settings['会社名'] || '弊社',
     webAppUrl: base,
     sheetUrl: ss_().getUrl(),
+    autoRefresh: autoRefreshSec_(settings),
+    stamp: boardStamp_(),
     options: optionsPayload_(settings),
     agencies: agencies.map(function (a) {
       return {
@@ -238,6 +250,20 @@ function requireAdmin_(token) {
 /** 最新状態を取り直す（引っぱって更新／他端末の変更の反映） */
 function apiAgencyRefresh(token) {
   return agencyBoard_(requireAgency_(token));
+}
+
+/**
+ * 変化があったかだけを返す（自動更新用）。
+ * 全データを読まないので、開きっぱなしでも実行時間をほとんど使わない。
+ */
+function apiAgencyPulse(token) {
+  requireAgency_(token);
+  return boardStamp_();
+}
+
+function apiAdminPulse(token) {
+  requireAdmin_(token);
+  return boardStamp_();
 }
 
 /** 紹介文をつくる */

@@ -19,6 +19,7 @@
       <a class="ghost-btn" id="btnSheet" href="#" target="_blank" rel="noopener">スプレッドシート</a>
       <button class="ghost-btn" id="btnRefresh" type="button">更新</button>
     </div>
+    <div class="tiny" id="syncedAt" style="position:absolute;right:16px;top:calc(58px + env(safe-area-inset-top));color:rgba(255,255,255,.62)"></div>
   </div>
 </div>
 
@@ -560,14 +561,86 @@ function openTpForm(id){
   openSheet(true);
 }
 
+var REFRESH_API = 'apiAdminRefresh';
+var PULSE_API   = 'apiAdminPulse';
+var FULL_EVERY_MS = 5 * 60 * 1000;
+
+/* ---------------- 自動更新 ----------------
+ * 「変化があったか」だけを軽く確認し（apiXxxPulse）、変わっていたときだけ本体を読み直す。
+ * 編集シートを開いている間は触らない（入力中の内容を消さないため）。
+ */
+var live = { stamp: (BOOT.stamp || null), fullAt: Date.now(), busy: false };
+
+function markSynced(){
+  var el = document.getElementById('syncedAt');
+  if (!el) return;
+  var d = new Date();
+  var p = function(n){ return (n < 10 ? '0' : '') + n; };
+  el.textContent = '最終更新 ' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
+/** 画面を見ていて、かつ編集中でないときだけ自動更新してよい */
+function liveReady(){
+  return document.visibilityState === 'visible'
+      && !document.getElementById('sheet').classList.contains('on');
+}
+
+function autoPull(onDone){
+  if (live.busy || !liveReady()) return;
+  live.busy = true;
+  live.fullAt = Date.now();
+  google.script.run
+    .withSuccessHandler(function(res){
+      live.busy = false;
+      var before = state.board.referrals.length;
+      state.board = res;
+      if (res.stamp) live.stamp = res.stamp;
+      render(); markSynced();
+      if (onDone) onDone(res.referrals.length - before);
+    })
+    .withFailureHandler(function(){ live.busy = false; })[REFRESH_API](TOKEN);
+}
+
+function liveTick(){
+  if (!liveReady() || live.busy) return;
+  // 一定時間ごとには、指紋に出ない変更（お知らせ・説明会・設定の編集）も拾うため丸ごと読み直す
+  if (Date.now() - live.fullAt > FULL_EVERY_MS) { autoPull(onArrived); return; }
+  google.script.run
+    .withSuccessHandler(function(st){
+      if (live.stamp === null){ live.stamp = st; return; }
+      // 問い合わせている間にタブが裏に回ったり編集を始めたりしていたら、何もしない
+      if (st !== live.stamp && liveReady()) autoPull(onArrived);
+    })
+    .withFailureHandler(function(){})[PULSE_API](TOKEN);
+}
+
+function startLive(){
+  markSynced();
+  if (!BOOT.autoRefresh) return;
+  setInterval(liveTick, BOOT.autoRefresh * 1000);
+  document.addEventListener('visibilitychange', function(){
+    if (document.visibilityState === 'visible') liveTick();
+  });
+}
+
+function onArrived(diff){
+  if (diff > 0) toast('新しいご紹介が ' + diff + '件 届きました');
+}
+
 /* ---------------- boot ---------------- */
 Array.prototype.forEach.call($('tabs').children, function(x){
   x.onclick=function(){ state.tab=x.getAttribute('data-t'); window.scrollTo(0,0); render(); };
 });
 $('mask').onclick=function(){ openSheet(false); };
 $('sheetClose').onclick=function(){ openSheet(false); };
-$('btnRefresh').onclick=function(){ call('apiAdminRefresh',[TOKEN],function(){ toast('最新の状態にしました'); },'読み込んでいます'); };
+$('btnRefresh').onclick=function(){
+  call('apiAdminRefresh',[TOKEN],function(res){
+    live.stamp = res.stamp || live.stamp; live.fullAt = Date.now();
+    markSynced(); toast('最新の状態にしました');
+  },'読み込んでいます');
+};
 render();
+startLive();
 </script>
 </body>
 </html>

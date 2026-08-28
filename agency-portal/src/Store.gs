@@ -525,6 +525,30 @@ function maxSeq_(rows) {
   return max;
 }
 
+/**
+ * 「前回見たときから変わったか」だけを判定するための軽い指紋。
+ *
+ * 画面の自動更新のたびに全データを読むと、Apps Script の実行時間をすぐ使い切ってしまう。
+ * ここでは 紹介シートの「行数」「更新日時」「ステータス」の3つだけを読んで文字列にまとめる。
+ * 変化があったときだけ、画面側が本体の読み込みを行う。
+ */
+function boardStamp_() {
+  var last = lastIdRow_(SHEETS.REFERRAL);
+  if (last < 2) return 'r0';
+  var sh = sheet_(SHEETS.REFERRAL);
+  var rows = last - 1;
+  var updated = sh.getRange(2, fieldIndex_(REFERRAL_FIELDS, 'updatedAt') + 1, rows, 1).getDisplayValues();
+  var status  = sh.getRange(2, fieldIndex_(REFERRAL_FIELDS, 'status') + 1, rows, 1).getDisplayValues();
+  var maxUpdated = '';
+  var acc = 0;
+  for (var i = 0; i < rows; i++) {
+    if (updated[i][0] > maxUpdated) maxUpdated = updated[i][0];
+    var st = String(status[i][0]);
+    for (var j = 0; j < st.length; j++) acc = (acc * 31 + st.charCodeAt(j)) % 2147483647;
+  }
+  return 'r' + rows + '|' + maxUpdated + '|' + acc;
+}
+
 /* ------------------------------------------------------------------ */
 /* お知らせ・LP                                                         */
 /* ------------------------------------------------------------------ */

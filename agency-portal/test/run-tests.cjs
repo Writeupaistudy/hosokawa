@@ -360,6 +360,44 @@ head('24. 開き直しても内容が保持されるか（ページを閉じて�
   setSetting_('紹介の目標件数', '10');
 }
 
+head('25. 自動更新（変化の検知）');
+{
+  const before = boardStamp_();
+  ok(typeof before === 'string' && before.length > 0, '指紋が文字列で返る', before);
+  ok(boardStamp_() === before, '何も変わらなければ指紋は同じ');
+
+  const s2 = createReferral_(findAgencyById_(a1.id), { kind:'顧客紹介', name:'指紋 テスト' }, 'アルファ株式会社');
+  const afterAdd = boardStamp_();
+  ok(afterAdd !== before, '代理店が新規登録すると指紋が変わる');
+
+  apiAdminUpdateReferral(adminToken, s2.id, { status:'アプローチ中' });
+  const afterStatus = boardStamp_();
+  ok(afterStatus !== afterAdd, '弊社がステータスを変えると指紋が変わる');
+
+  // スプレッドシートを直接いじった場合（更新日時は変わらない）も、ステータスなら拾える
+  {
+    const row = findReferralById_(s2.id)._row;
+    const col = fieldIndex_(REFERRAL_FIELDS, 'status') + 1;
+    sheet_(SHEETS.REFERRAL).getRange(row, col).setValue('稼働中');
+    ok(boardStamp_() !== afterStatus, 'シートでステータスを直接書き換えても検知できる');
+  }
+
+  ok(agencyBoard_(findAgencyById_(a1.id)).stamp === boardStamp_(), '代理店ページに現在の指紋が渡る');
+  ok(adminBoard_(adminToken).stamp === boardStamp_(), '管理画面にも現在の指紋が渡る');
+
+  // 間隔設定の丸め
+  ok(autoRefreshSec_({ '自動更新の間隔（秒）':'25' }) === 25, '設定した秒数がそのまま使われる');
+  ok(autoRefreshSec_({ '自動更新の間隔（秒）':'0' }) === 0, '0 なら自動更新なし');
+  ok(autoRefreshSec_({ '自動更新の間隔（秒）':'1' }) === 10, '短すぎる値は10秒に引き上げる');
+  ok(autoRefreshSec_({ '自動更新の間隔（秒）':'99999' }) === 600, '長すぎる値は10分に丸める');
+  ok(autoRefreshSec_({}) === 25, '未設定なら既定の25秒');
+  ok(autoRefreshSec_({ '自動更新の間隔（秒）':'ぜんぶ' }) === 0, '数値以外は自動更新なし扱い');
+
+  let denied2 = false;
+  try { apiAdminPulse('にせトークン'); } catch(e){ denied2 = true; }
+  ok(denied2, '指紋の取得にも権限チェックがかかる');
+}
+
 console.log('\n────────────────────────');
 console.log(pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);
